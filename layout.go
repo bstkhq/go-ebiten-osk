@@ -38,7 +38,8 @@ func named(enumeration string, i int, names ...string) string {
 	return names[i]
 }
 
-// A Layout is the keys of one locale in one form.
+// A Layout defines the layers and physical positions of a keyboard. A stock layout
+// serves one locale in one form.
 type Layout struct {
 	// Layers are the faces of the layout, shown one at a time. The first is the one a
 	// keyboard starts on.

@@ -9,7 +9,7 @@ import (
 
 // A Keyboard is a board of keys on the screen. It holds a layout and the rectangle it
 // occupies, and every [Keyboard.Update] turns the pointers on its keys into key presses and
-// typed text for its input. It draws nothing.
+// typed text for its input. It draws nothing. Make one with [New].
 type Keyboard struct {
 	rect     image.Rectangle
 	hidden   bool
