@@ -34,7 +34,6 @@ type Keyboard struct {
 
 	landed map[PointerID]landing
 	down   []Pointer
-	mouse  mouseLanding
 
 	repeat eraseRepeat
 
@@ -49,9 +48,9 @@ type Keyboard struct {
 }
 
 type landing struct {
-	key     int
-	taken   bool
-	pending bool
+	key    int
+	taken  bool
+	lifted bool
 }
 
 // A change is what became of a physical position in one update of a keyboard: whether the
@@ -223,7 +222,10 @@ func (k *Keyboard) Update() {
 	k.changes = k.changes[:0]
 	k.down = k.pointers.AppendPointers(k.down[:0])
 
-	k.resolveMouse(listening)
+	stock, _ := k.pointers.(*screen)
+	if stock != nil {
+		stock.adoptMouse(k, listening)
+	}
 	k.lift(listening)
 
 	if !listening {
@@ -233,6 +235,9 @@ func (k *Keyboard) Update() {
 	}
 
 	k.land(listening)
+	if stock != nil {
+		stock.rememberTouches(k)
+	}
 	k.repeatErase()
 	k.input.feed(&k.held, k.changes, k.events)
 }
@@ -242,7 +247,7 @@ func (k *Keyboard) Update() {
 // listening.
 func (k *Keyboard) lift(listening bool) {
 	for id, landed := range k.landed {
-		if !listening || k.hidden || !stayedDown(k.down, id) {
+		if !listening || k.hidden || landed.lifted || !stayedDown(k.down, id) {
 			k.release(landed.key)
 			delete(k.landed, id)
 		}
@@ -275,25 +280,29 @@ func (k *Keyboard) land(listening bool) {
 }
 
 func (k *Keyboard) take(pointer Pointer, listening bool) landing {
-	at := image.Pt(pointer.X, pointer.Y)
-	if k.hidden || (!listening && !pointer.Landed) || !at.In(k.rect) {
+	if k.hidden || (!listening && !pointer.Landed) {
 		return landing{key: noKey}
 	}
 
-	l := landing{key: k.keyAt(at), taken: true}
-	if _, stock := k.pointers.(*screen); stock && pointer.ID == Mouse && l.key != noKey {
-		return k.deferMouse(pointer, l)
+	at := image.Pt(pointer.X, pointer.Y)
+	if stock, ok := k.pointers.(*screen); ok && pointer.ID == Mouse {
+		return stock.takeMouse(k, at, pointer.Lifted)
 	}
-	return k.pressLanding(l, pointer.Lifted)
+	return k.takeAt(at, pointer.Lifted)
 }
 
-func (k *Keyboard) pressLanding(l landing, lifted bool) landing {
-	k.press(l.key)
-	if lifted {
-		k.release(l.key)
-		l.key = noKey
+func (k *Keyboard) takeAt(at image.Point, lifted bool) landing {
+	if !at.In(k.rect) {
+		return landing{key: noKey, lifted: lifted}
 	}
-	return l
+
+	key := k.keyAt(at)
+	k.press(key)
+	if lifted {
+		k.release(key)
+		key = noKey
+	}
+	return landing{key: key, taken: true, lifted: lifted}
 }
 
 func (k *Keyboard) keyAt(at image.Point) int {

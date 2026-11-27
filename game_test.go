@@ -522,17 +522,17 @@ func TestAGameReadsTouchesOnTheKeys(t *testing.T) {
 
 func TestAReusedTouchIDPressesItsNewKey(t *testing.T) {
 	h := sit(t)
-	hKey, qKey := h.middle("H"), h.middle("Q")
+	hKey, gKey := h.middle("H"), h.middle("G")
 	fingers := h.Runtime().Injector()
 
 	fingers.SetTouches([]ebitenmcp.Touch{{ID: 7, X: hKey.X, Y: hKey.Y}})
 	h.Tick(3)
 	// The same slot reports the new contact, with no intervening empty sample.
-	fingers.SetTouches([]ebitenmcp.Touch{{ID: 7, X: qKey.X, Y: qKey.Y}})
+	fingers.SetTouches([]ebitenmcp.Touch{{ID: 7, X: gKey.X, Y: gKey.Y}})
 	h.Tick(3)
 
 	h.read(func(g *reader) {
-		if string(g.text) != "HQ" || g.hDown || g.hUps != 1 || !slices.Equal(g.down, []ebiten.Key{ebiten.KeyQ}) {
+		if string(g.text) != "HG" || g.hDown || g.hUps != 1 || !slices.Equal(g.down, []ebiten.Key{ebiten.KeyG}) {
 			t.Errorf("reused ID: typed %q, down %v, H releases %d", string(g.text), g.down, g.hUps)
 		}
 	})
@@ -540,7 +540,7 @@ func TestAReusedTouchIDPressesItsNewKey(t *testing.T) {
 	h.settle()
 }
 
-func TestAMouseEchoAcrossAKeyEdgeTypesOnlyTheTouch(t *testing.T) {
+func TestAMouseEchoAcrossAKeyEdgePressesOnce(t *testing.T) {
 	for _, order := range []string{"together", "mouse first", "touch first"} {
 		t.Run(order, func(t *testing.T) {
 			h := sit(t)
@@ -569,19 +569,112 @@ func TestAMouseEchoAcrossAKeyEdgeTypesOnlyTheTouch(t *testing.T) {
 				}
 			})
 			h.Tick(3)
+			want := ebiten.KeyH
+			if order == "mouse first" {
+				want = ebiten.KeyG
+			}
 			inject.SetTouches(nil)
 			h.settle()
 
 			h.read(func(g *reader) {
-				if string(g.text) != "H" || len(g.down) != 0 || g.hUps != 1 || !slices.Contains(g.taken, osk.Mouse) {
-					t.Errorf("with only the mouse echo left: typed %q, down %v, H releases %d, taken %v",
-						string(g.text), g.down, g.hUps, g.taken)
+				if string(g.text) != want.String() || len(g.down) != 0 ||
+					!slices.Equal(g.released, []ebiten.Key{want}) || !slices.Contains(g.taken, osk.Mouse) {
+					t.Errorf("with only the mouse echo left: typed %q, down %v, releases %v, taken %v",
+						string(g.text), g.down, g.released, g.taken)
 				}
 			})
 			inject.MouseUp(ebiten.MouseButtonLeft)
 			h.settle()
 		})
 	}
+}
+
+func TestAStockMouseTakesOverFromThePhysicalKeyWithoutNewEdges(t *testing.T) {
+	h := sit(t)
+	at := h.middle("H")
+	inject := h.Runtime().Injector()
+	h.Move(float64(at.X), float64(at.Y))
+	inject.KeyDown(ebiten.KeyH)
+	h.Tick(4)
+
+	h.inOneTick(func() {
+		inject.MouseDown(ebiten.MouseButtonLeft)
+		inject.KeyUp(ebiten.KeyH)
+	})
+	h.Tick(4)
+	h.read(func(g *reader) {
+		if !slices.Equal(g.pressed, []ebiten.Key{ebiten.KeyH}) || g.hUps != 0 || !g.hDown {
+			t.Errorf("between physical H and the mouse: presses %v, releases %v, held %t", g.pressed, g.released, g.hDown)
+		}
+	})
+	inject.MouseUp(ebiten.MouseButtonLeft)
+	h.settle()
+}
+
+func TestAMouseEchoOutsideTheBoardIsTaken(t *testing.T) {
+	h := sit(t)
+	x := h.middle("Q").X
+	inject := h.Runtime().Injector()
+	h.Move(float64(x), 119)
+	h.inOneTick(func() {
+		inject.SetTouches([]ebitenmcp.Touch{{ID: 7, X: x, Y: 121}})
+		inject.MouseDown(ebiten.MouseButtonLeft)
+	})
+	h.Tick(3)
+	h.read(func(g *reader) {
+		if string(g.text) != "Q" || !slices.Contains(g.taken, 7) || !slices.Contains(g.taken, osk.Mouse) {
+			t.Errorf("echo at the board edge: typed %q, taken %v", string(g.text), g.taken)
+		}
+	})
+	inject.SetTouches(nil)
+	inject.MouseUp(ebiten.MouseButtonLeft)
+	h.settle()
+}
+
+func TestAMouseAndATouchFarApartPressTheirOwnKeys(t *testing.T) {
+	h := sit(t)
+	hKey, qKey := h.middle("H"), h.middle("Q")
+	inject := h.Runtime().Injector()
+	h.Move(float64(hKey.X), float64(hKey.Y))
+	h.inOneTick(func() {
+		inject.SetTouches([]ebitenmcp.Touch{{ID: 7, X: qKey.X, Y: qKey.Y}})
+		inject.MouseDown(ebiten.MouseButtonLeft)
+	})
+	h.Tick(3)
+	h.read(func(g *reader) {
+		if string(g.text) != "QH" || !slices.Equal(g.down, []ebiten.Key{ebiten.KeyH, ebiten.KeyQ}) {
+			t.Errorf("mouse and finger far apart: typed %q, down %v", string(g.text), g.down)
+		}
+	})
+	inject.SetTouches(nil)
+	inject.MouseUp(ebiten.MouseButtonLeft)
+	h.settle()
+}
+
+func TestAMouseEchoStillMatchesAfterTwoTouchFreeTicks(t *testing.T) {
+	h := sit(t)
+	at := h.middle("H")
+	inject := h.Runtime().Injector()
+	h.Move(float64(at.X), float64(at.Y))
+	var game *reader
+	h.read(func(g *reader) { game = g })
+	h.inOneTick(func() {
+		inject.SetTouches([]ebitenmcp.Touch{{ID: 7, X: at.X, Y: at.Y}})
+		game.afterUpdate = func() {
+			inject.SetTouches(nil)
+			game.afterUpdate = func() {
+				game.afterUpdate = func() { inject.MouseDown(ebiten.MouseButtonLeft) }
+			}
+		}
+	})
+	h.Tick(5)
+	h.read(func(g *reader) {
+		if string(g.text) != "H" || len(g.down) != 0 || !slices.Contains(g.taken, osk.Mouse) {
+			t.Errorf("echo after the touch lifted: typed %q, down %v, taken %v", string(g.text), g.down, g.taken)
+		}
+	})
+	inject.MouseUp(ebiten.MouseButtonLeft)
+	h.settle()
 }
 
 func TestAGameReadsTwoKeysAndTakesAFingerInTheMargin(t *testing.T) {

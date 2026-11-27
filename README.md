@@ -61,18 +61,21 @@ repeat. Counting ticks lets a game that handles `IsKeyJustPressed` erase once
 per repeat with deterministic timing at its chosen tick rate.
 
 The stock pointer source sees one snapshot per tick. When a touch ID moves
-more than 64 logical pixels between consecutive samples, the keyboard treats
-it as a lift and a new landing. A close reuse of the same ID can look like a
-slide, and a fast enough slide can look like a new landing. A custom source
-that knows the edges can report them with `Pointer.Landed`.
+more than 48 logical pixels between consecutive samples, the keyboard treats
+it as a lift and a new landing. That catches reuse between adjacent letter
+centres on a 640-pixel compact board. A closer reuse can look like a slide,
+and a rapid slide can look like a new landing. A custom source that knows the
+edges can report them with `Pointer.Landed`.
 
-The stock source also handles touchscreens that echo a touch as a mouse press.
-A mouse landing on a key waits one tick for a touch within 12 logical pixels.
-Touches in the preceding, same or following tick can match. The touch chooses
-the key, and a matching mouse press stays suppressed until the button lifts.
-A genuine mouse press in that range and time window can look like an echo.
-Stock mouse landings are taken immediately for `PointerTaken`. Custom pointer
-sources supply their own edges and handle any duplicate reports themselves.
+The stock source matches a mouse landing to a touch within 12 logical pixels
+in the current or three preceding ticks. The touch picks the key and the
+matching mouse button owns no hold. The mouse counts as taken if either
+landing belongs to the keyboard, including echoes just outside its rectangle.
+When the mouse lands first, it presses immediately. A matching new touch one
+tick later takes over the existing landing and controls its release. That
+can keep the mouse's choice when the reports straddle two keys. An independent
+mouse click in the same range and time window can look like an echo. Custom
+pointer sources handle duplicate reports themselves.
 
 ## State
 

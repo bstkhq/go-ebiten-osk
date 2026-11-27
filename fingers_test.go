@@ -77,3 +77,18 @@ func TestTakenPointersFollowTheLandingEvenInTheMargin(t *testing.T) {
 		t.Error("showing under a held finger must leave it alone")
 	}
 }
+
+func TestAnExplicitLiftFreesTheIDForTheNextLanding(t *testing.T) {
+	b := compactBoard(t)
+	b.tap(t, 7, "Q")
+	b.Update()
+	if b.typed() != "Q" || !b.PointerTaken(7) {
+		t.Errorf("completed tap: typed %q, taken %t", b.typed(), b.PointerTaken(7))
+	}
+
+	b.touch(t, 7, "W")
+	b.Update()
+	if b.typed() != "W" || !b.input.IsKeyPressed(ebiten.KeyW) {
+		t.Errorf("reused ID after explicit lift: typed %q, W down %t", b.typed(), b.input.IsKeyPressed(ebiten.KeyW))
+	}
+}
