@@ -35,6 +35,35 @@ Try it:
 go run github.com/bstkhq/go-ebiten-osk/examples/typing@latest
 ```
 
+Press F2 to cycle between the dark theme, the light theme, and the example's own painter.
+
+## Customize the keyboard
+
+Copy the default theme and change the fields you need. Sizes are fractions of a row's height.
+
+```go
+theme := paint.Dark()
+theme.Font = myFont // *sfnt.Font, for example from sfnt.Parse
+theme.CharacterSize = 0.38
+theme.Palette.Key = color.RGBA{R: 0x20, G: 0x40, B: 0x60, A: 0xff}
+painter.SetTheme(theme) // takes effect on the next Draw
+```
+
+The palette sets the panel, character keys, control keys, action key, and labels. A palette edit
+also updates the derived colours, including the pressed face and the lip. Use
+`theme.Roles[osk.RoleControl].All` for every state of a role, `theme.States[osk.StatePressed]`
+for every role in a state, or `theme.Roles[osk.RoleControl].States[osk.StatePressed]` for a
+specific combination. Each override can set any of `Face`, `Lip`, `Border`, and `Label`.
+Leave a colour nil to inherit it, or use `color.Transparent` to make it transparent.
+
+Set a layout key's `Icon` to `osk.IconShift`, `osk.IconErase`, or `osk.IconAction` to
+draw a shape with the stock painter. Keep a label for painters that use words.
+
+To replace the painter, call your own drawing code in the game's `Draw`. Use
+`keyboard.Shown()` and `keyboard.Rect()` for the panel, and `keyboard.AppendKeys` for each
+key's rectangle, role, state, and label or icon. The example's
+[custom painter](examples/typing/painter.go) uses this same public state.
+
 ## How it is made
 
 - **The keyboard draws nothing.** `osk.Keyboard` holds a layout and a rectangle, and turns the fingers and the mouse on its keys into key presses and typed text. Package `paint` draws it from a theme; a game with a look of its own draws it itself from `Keyboard.AppendKeys`.
@@ -50,9 +79,9 @@ Early. What works today:
 
 - the compact en-US board (letters, space, erase), typed with fingers or the mouse;
 - the input copy, alongside the physical keyboard;
-- the stock painter with a dark theme.
+- the stock painter with dark and light themes.
 
-Planned, in the [issues](https://github.com/bstkhq/go-ebiten-osk/issues): layers and the es-ES boards, the full form for names and emails, erase that repeats, a light theme and the full theme model, more locales, and an optional hook that makes Ebitengine's own functions report the on-screen keys, for code that cannot be changed.
+Planned, in the [issues](https://github.com/bstkhq/go-ebiten-osk/issues): layers and the es-ES boards, the full form for names and emails, erase that repeats, more locales, and an optional hook that makes Ebitengine's own functions report the on-screen keys, for code that cannot be changed.
 
 Built and tested against Ebitengine v2.9.9. The API will change until the first tagged version.
 

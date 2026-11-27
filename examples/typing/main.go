@@ -12,6 +12,8 @@ import (
 	"log"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/tinne26/etxt"
 
 	osk "github.com/bstkhq/go-ebiten-osk"
@@ -34,6 +36,8 @@ var (
 type game struct {
 	keyboard *osk.Keyboard
 	painter  *paint.Painter
+	custom   customPainter
+	look     int
 	text     *etxt.Renderer
 	line     []rune
 }
@@ -51,11 +55,18 @@ func newGame() (*game, error) {
 
 	keyboard.SetRect(image.Rect(0, boardTop, width, height))
 
-	theme := paint.Dark()
+	return &game{
+		keyboard: keyboard,
+		painter:  paint.New(paint.Dark()),
+		custom:   customPainter{text: newText(19)},
+		text:     newText(48),
+	}, nil
+}
 
+func newText(size float64) *etxt.Renderer {
 	text := etxt.NewRenderer()
-	text.SetFont(theme.Font)
-	text.SetSize(48)
+	text.SetFont(paint.Dark().Font)
+	text.SetSize(size)
 	text.SetColor(ink)
 	text.SetAlign(etxt.Center)
 
@@ -63,13 +74,17 @@ func newGame() (*game, error) {
 	// font's mark for a missing one, where etxt would otherwise panic.
 	text.Glyph().SetMissHandler(etxt.OnMissNotdef)
 
-	return &game{keyboard: keyboard, painter: paint.New(theme), text: text}, nil
+	return text
 }
 
 // Update reads the keyboard exactly as a game reads a physical one, with osk in the place of
 // ebiten and inpututil.
 func (g *game) Update() error {
 	g.keyboard.Update()
+
+	if inpututil.IsKeyJustPressed(ebiten.KeyF2) {
+		g.cycleLook()
+	}
 
 	if osk.IsKeyJustPressed(ebiten.KeyBackspace) {
 		g.line = g.line[:max(len(g.line)-1, 0)]
@@ -80,9 +95,24 @@ func (g *game) Update() error {
 	return nil
 }
 
+func (g *game) cycleLook() {
+	g.look = (g.look + 1) % 3
+	switch g.look {
+	case 0:
+		g.painter.SetTheme(paint.Dark())
+	case 1:
+		g.painter.SetTheme(paint.Light())
+	}
+}
+
 func (g *game) Draw(screen *ebiten.Image) {
 	screen.Fill(background)
 	g.text.Draw(screen, string(g.line)+"_", width/2, boardTop/2)
+	ebitenutil.DebugPrintAt(screen, "F2  Keyboard appearance", 16, 16)
+	if g.look == 2 {
+		g.custom.Draw(screen, g.keyboard)
+		return
+	}
 	g.painter.Draw(screen, g.keyboard)
 }
 

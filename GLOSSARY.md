@@ -56,6 +56,14 @@ _Avoid_: injector, patch
 The values that give a keyboard its look: colours, sizes, fonts.
 _Avoid_: skin, style
 
+**Palette**
+
+The base colours of a theme, used to derive the colours of keys in each state.
+
+**Lip**
+
+The lower edge visible beneath a raised key.
+
 **Painter**:
 What draws a keyboard from its state and a theme.
 _Avoid_: renderer, view
