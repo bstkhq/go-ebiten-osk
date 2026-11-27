@@ -2,7 +2,9 @@ package osk
 
 import (
 	"fmt"
+	"maps"
 	"math"
+	"slices"
 
 	"github.com/hajimehoshi/ebiten/v2"
 )
@@ -152,6 +154,21 @@ func (a Action) position(positions Positions) (ebiten.Key, bool) {
 	key, ok := positions[runes[0]]
 
 	return key, ok && key >= 0 && key <= ebiten.KeyMax
+}
+
+// clone is a copy of the layout that shares nothing with it.
+func (l Layout) clone() Layout {
+	layers := make([]Layer, len(l.Layers))
+
+	for i, layer := range l.Layers {
+		layers[i].Rows = make([][]Key, len(layer.Rows))
+
+		for j, row := range layer.Rows {
+			layers[i].Rows[j] = slices.Clone(row)
+		}
+	}
+
+	return Layout{Layers: layers, Positions: maps.Clone(l.Positions)}
 }
 
 // check says why a keyboard cannot work with the layout, or nil.

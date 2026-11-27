@@ -58,11 +58,13 @@ Built and tested against Ebitengine v2.9.9. The API will change until the first 
 
 ## Tests
 
-The suite needs a display, as anything that links Ebitengine does. With [go-ebiten-mcp](https://github.com/bstkhq/go-ebiten-mcp):
+The suite needs a display, as anything that links Ebitengine does. With [go-ebiten-mcp](https://github.com/bstkhq/go-ebiten-mcp), on the GPU:
 
 ```sh
-ebitenmcp run -- go test ./...
+ebitenmcp run --gpu -- go test ./...
 ```
+
+The golden pictures under `testdata` were drawn by a hardware renderer, named beside each one: a software renderer may not match them to the pixel.
 
 ## Licence
 

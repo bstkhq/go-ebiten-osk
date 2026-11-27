@@ -81,11 +81,14 @@ func WithInput(input *Input) Option {
 }
 
 // New is a keyboard of the layout, shown, on its first layer, with no rectangle yet. It
-// refuses a layout that cannot work.
+// refuses a layout that cannot work. The keyboard keeps a copy of the layout: changing the
+// one it was given afterwards changes nothing.
 func New(layout Layout, opts ...Option) (*Keyboard, error) {
 	if err := layout.check(); err != nil {
 		return nil, err
 	}
+
+	layout = layout.clone()
 
 	o := options{pointers: &screen{}, input: defaultInput}
 	for _, opt := range opts {
@@ -141,8 +144,9 @@ func (k *Keyboard) AppendEvents(events []Event) []Event {
 
 // Update takes in the pointers of this tick. A pointer that lands on a key presses it, and
 // types its text, until that pointer lifts; where it moves in between changes nothing. Call
-// it once every tick, shown or hidden, before reading the input: an input stops hearing a
-// keyboard that is no longer updated, as if every key it held had vanished.
+// it once every tick, shown or hidden, before reading the input: an input answers for a
+// keyboard only in the ticks it was updated in, and a keyboard that is no longer updated lets
+// go of every key it held.
 func (k *Keyboard) Update() {
 	k.events = k.events[:0]
 	k.typed = k.typed[:0]
@@ -150,7 +154,7 @@ func (k *Keyboard) Update() {
 
 	k.lift()
 	k.land()
-	k.presses.tick()
+	k.presses.tick(k.input.physical)
 	k.input.hear(k)
 }
 
@@ -221,7 +225,10 @@ func (k *Keyboard) press(key int) {
 
 	if position, ok := action.position(k.layout.Positions); ok {
 		k.presses.held[position]++
-		k.events = append(k.events, Event{Kind: KeyDown, Key: position})
+
+		if k.presses.held[position] == 1 {
+			k.events = append(k.events, Event{Kind: KeyDown, Key: position})
+		}
 	}
 
 	if action.text != "" {
@@ -245,7 +252,10 @@ func (k *Keyboard) release(key int) {
 
 	if position, ok := k.keys[key].Do.position(k.layout.Positions); ok {
 		k.presses.held[position]--
-		k.events = append(k.events, Event{Kind: KeyUp, Key: position})
+
+		if k.presses.held[position] == 0 {
+			k.events = append(k.events, Event{Kind: KeyUp, Key: position})
+		}
 	}
 }
 
@@ -297,21 +307,39 @@ func rowWeight(row []Key) float64 {
 
 // presses is what a keyboard holds of each physical position, as its input reads it.
 type presses struct {
-	// held counts the keys pressed at each position.
+	// held counts the keys pressed at each position: two keys of a layer may stand for one
+	// position, and it goes down with the first and up with the last.
 	held [ebiten.KeyMax + 1]int
-	// ticks counts the updates each position has been pressed for; zero is up.
+	// ticks is how many updates the hold each position is part of has lasted; zero is up.
+	// A hold may be older than the keyboard's own press: it began on the physical key.
 	ticks [ebiten.KeyMax + 1]int
 	// was says whether each position was pressed after the update before the last.
 	was [ebiten.KeyMax + 1]bool
+	// older is by how many ticks a hold the keyboard left to the physical key is older than
+	// that key's own press.
+	older [ebiten.KeyMax + 1]int
 }
 
-func (p *presses) tick() {
+// tick moves every position one update on. A hold that the physical keyboard and the
+// on-screen one pass between them without the key going up is one hold, and keeps its age.
+func (p *presses) tick(hardware physical) {
 	for position := range p.held {
+		physical := hardware.KeyPressDuration(ebiten.Key(position))
+		if physical == 0 {
+			p.older[position] = 0
+		} else {
+			physical += p.older[position]
+		}
+
 		p.was[position] = p.ticks[position] > 0
 
-		if p.held[position] > 0 {
-			p.ticks[position]++
-		} else {
+		switch {
+		case p.held[position] > 0:
+			p.ticks[position] = max(p.ticks[position]+1, physical)
+		case p.was[position] && physical > 0:
+			p.older[position] += p.ticks[position] + 1 - physical
+			p.ticks[position] = 0
+		default:
 			p.ticks[position] = 0
 		}
 	}

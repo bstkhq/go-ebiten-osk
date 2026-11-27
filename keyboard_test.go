@@ -440,3 +440,107 @@ func TestAnUnknownStockLayoutIsAnError(t *testing.T) {
 		t.Error("a form with no stock layout yet was accepted")
 	}
 }
+
+func TestEveryKeyOfTheCompactBoardTypesWhatItShows(t *testing.T) {
+	shown := compactBoard(t).AppendKeys(nil)
+	if len(shown) != 28 {
+		t.Fatalf("the compact en-US board has %d keys, want 26 letters, space and erase", len(shown))
+	}
+
+	for _, key := range shown {
+		// A board of its own for every key: nothing another key did is left in the input.
+		b := compactBoard(t)
+		b.touch(t, 1, key.Face())
+		b.Update()
+
+		typed, pressed := b.typed(), b.input.AppendJustPressedKeys(nil)
+
+		want, position := key.Face(), ebiten.KeyA+ebiten.Key(key.Face()[0]-'A')
+
+		switch key.Face() {
+		case "Space":
+			want, position = " ", ebiten.KeySpace
+		case "Delete":
+			want, position = "", ebiten.KeyBackspace
+		}
+
+		if typed != want {
+			t.Errorf("the key %q typed %q, want %q", key.Face(), typed, want)
+		}
+
+		if len(pressed) != 1 || pressed[0] != position {
+			t.Errorf("the key %q pressed %v, want the position %v alone", key.Face(), pressed, position)
+		}
+	}
+}
+
+func TestAKeyboardKeepsTheLayoutItWasMadeWith(t *testing.T) {
+	layout, err := osk.Stock(osk.EnUS, osk.Compact)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	b := newBoard(t, layout)
+
+	// Its maker goes on changing the layout it gave: a shorter row, another label, another
+	// position.
+	layout.Layers[0].Rows[0] = layout.Layers[0].Rows[0][:3]
+	layout.Layers[0].Rows[1][0].Label = "changed"
+	layout.Layers = append(layout.Layers[:0], osk.Layer{})
+	layout.Positions['Q'] = ebiten.KeyF12
+
+	b.SetRect(image.Rect(0, 0, 500, 200))
+
+	if got := len(b.AppendKeys(nil)); got != 28 {
+		t.Fatalf("after its maker changed the layout, the keyboard has %d keys, want its 28", got)
+	}
+
+	b.touch(t, 1, "Q")
+	b.touch(t, 2, "A")
+	b.Update()
+
+	if !b.input.IsKeyPressed(ebiten.KeyQ) || b.input.IsKeyPressed(ebiten.KeyF12) || b.typed() != "QA" {
+		t.Errorf("after its maker changed the layout, Q and A typed %q and pressed %v", b.typed(), b.input.AppendPressedKeys(nil))
+	}
+}
+
+func TestTwoKeysOfOnePositionAreOneKeyToAGame(t *testing.T) {
+	layout := osk.Layout{
+		Positions: osk.Positions{'q': ebiten.KeyQ, 'Q': ebiten.KeyQ},
+		Layers:    []osk.Layer{{Rows: [][]osk.Key{{{Do: osk.Type("q")}, {Do: osk.Type("Q")}}}}},
+	}
+
+	b := newBoard(t, layout)
+
+	b.touch(t, 1, "q")
+	b.Update()
+	b.touch(t, 2, "Q")
+	b.Update()
+
+	want := []osk.Event{{Kind: osk.Text, Text: "Q"}}
+
+	if got := b.AppendEvents(nil); !sameEvents(got, want) {
+		t.Errorf("a second key of a position that is down made the events %v, want only its text: %v", got, want)
+	}
+
+	if b.input.IsKeyJustPressed(ebiten.KeyQ) {
+		t.Error("a second key of a position that is down pressed it again")
+	}
+
+	b.lift(1)
+	b.Update()
+
+	if got := b.AppendEvents(nil); len(got) != 0 || !b.input.IsKeyPressed(ebiten.KeyQ) {
+		t.Errorf("lifting one of two keys of a position made the events %v and left it pressed: %t, want none and pressed",
+			got, b.input.IsKeyPressed(ebiten.KeyQ))
+	}
+
+	b.lift(2)
+	b.Update()
+
+	want = []osk.Event{{Kind: osk.KeyUp, Key: ebiten.KeyQ}}
+
+	if got := b.AppendEvents(nil); !sameEvents(got, want) || !b.input.IsKeyJustReleased(ebiten.KeyQ) {
+		t.Errorf("lifting the last key of a position made the events %v, want %v and a release", got, want)
+	}
+}

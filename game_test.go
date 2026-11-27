@@ -260,6 +260,10 @@ func TestAKeyboardTheGameDropsIsNoLongerHeard(t *testing.T) {
 		if g.hDown || len(g.down) != 0 {
 			t.Errorf("four ticks after its keyboard was dropped, the game still sees H down: %t, keys down: %v", g.hDown, g.down)
 		}
+
+		if g.hUps != 1 || string(g.text) != "H" {
+			t.Errorf("the dropped keyboard's H went up %d times and left the text %q, want once and one H", g.hUps, string(g.text))
+		}
 	})
 
 	h.Runtime().Injector().MouseUp(ebiten.MouseButtonLeft)

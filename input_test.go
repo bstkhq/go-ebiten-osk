@@ -7,32 +7,42 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
-// desk is a physical keyboard a test types on: how long each key has been down, which went up
-// in this tick, and what was typed in it.
+// desk is a physical keyboard a test types on, telling of its keys as Ebitengine does: how
+// long each has been down, which went down and which went up in this tick, and what was typed
+// in it. A key that goes down and up within one tick is pressed, just pressed and just
+// released in it, with a duration of zero.
 type desk struct {
 	held     map[ebiten.Key]int
+	pressed  map[ebiten.Key]bool
 	released map[ebiten.Key]bool
 	typed    []rune
 }
 
-func (d *desk) IsKeyPressed(key ebiten.Key) bool      { return d.held[key] > 0 }
-func (d *desk) KeyPressDuration(key ebiten.Key) int   { return d.held[key] }
+func newDesk() *desk {
+	return &desk{held: map[ebiten.Key]int{}, pressed: map[ebiten.Key]bool{}, released: map[ebiten.Key]bool{}}
+}
+
+func (d *desk) IsKeyPressed(key ebiten.Key) bool      { return d.held[key] > 0 || d.pressed[key] }
+func (d *desk) IsKeyJustPressed(key ebiten.Key) bool  { return d.pressed[key] }
 func (d *desk) IsKeyJustReleased(key ebiten.Key) bool { return d.released[key] }
+func (d *desk) KeyPressDuration(key ebiten.Key) int   { return d.held[key] }
 func (d *desk) AppendInputChars(runes []rune) []rune  { return append(runes, d.typed...) }
 
 // tick moves the desk one tick on: held keys have been down one tick longer, and nothing has
-// just been released or typed.
+// just gone down, gone up or been typed.
 func (d *desk) tick() {
 	for key := range d.held {
 		d.held[key]++
 	}
 
+	d.pressed = map[ebiten.Key]bool{}
 	d.released = map[ebiten.Key]bool{}
 	d.typed = nil
 }
 
 func (d *desk) press(key ebiten.Key, typed rune) {
 	d.held[key] = 1
+	d.pressed[key] = true
 	d.typed = append(d.typed, typed)
 }
 
@@ -55,134 +65,259 @@ func (f *finger) AppendPointers(pointers []Pointer) []Pointer {
 	return append(pointers, Pointer{ID: 1, X: f.x, Y: f.y})
 }
 
-// both is a physical keyboard and an on-screen Q key under one finger, feeding one input.
-func both(t *testing.T) (*desk, *finger, *Keyboard, *Input) {
+// both is a physical keyboard and an on-screen Q key under one finger, feeding one input
+// whose clock the test holds: now.
+type both struct {
+	physical *desk
+	touch    *finger
+	keyboard *Keyboard
+	input    *Input
+	now      int64
+}
+
+func newBoth(t *testing.T) *both {
 	t.Helper()
 
-	physical := &desk{held: map[ebiten.Key]int{}, released: map[ebiten.Key]bool{}}
-	input := StillInput()
-	input.physical = physical
-	touch := &finger{x: 50, y: 50}
+	b := &both{physical: newDesk(), touch: &finger{x: 50, y: 50}, input: NewInput()}
+	b.input.physical = b.physical
+	b.input.tick = func() int64 { return b.now }
 
 	layout := Layout{
 		Positions: Positions{'q': ebiten.KeyQ},
 		Layers:    []Layer{{Rows: [][]Key{{{Do: Type("q")}}}}},
 	}
 
-	keyboard, err := New(layout, WithPointers(touch), WithInput(input))
+	keyboard, err := New(layout, WithPointers(b.touch), WithInput(b.input))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	keyboard.SetRect(image.Rect(0, 0, 100, 100))
+	b.keyboard = keyboard
 
-	return physical, touch, keyboard, input
+	return b
 }
 
-func TestAKeyIsPressedWhileEitherKeyboardHoldsIt(t *testing.T) {
-	physical, touch, keyboard, input := both(t)
+// tick starts the next tick: the game's clock and the physical keyboard move on. What the test
+// does to the keys comes after it, and then the keyboard's update.
+func (b *both) tick() {
+	b.now++
+	b.physical.tick()
+}
 
-	physical.press(ebiten.KeyQ, 'q')
-	keyboard.Update()
+// q is what the input says of Q in this tick.
+type q struct {
+	pressed, justPressed, justReleased bool
+	duration                           int
+}
 
-	if !input.IsKeyJustPressed(ebiten.KeyQ) || input.KeyPressDuration(ebiten.KeyQ) != 1 {
-		t.Error("a physical press alone must be a press of the input")
+func (b *both) q() q {
+	return q{
+		pressed:      b.input.IsKeyPressed(ebiten.KeyQ),
+		justPressed:  b.input.IsKeyJustPressed(ebiten.KeyQ),
+		justReleased: b.input.IsKeyJustReleased(ebiten.KeyQ),
+		duration:     b.input.KeyPressDuration(ebiten.KeyQ),
+	}
+}
+
+func TestAHoldThatPassesFromThePhysicalKeyToTheScreenIsOneHold(t *testing.T) {
+	b := newBoth(t)
+
+	b.physical.press(ebiten.KeyQ, 'q')
+	b.keyboard.Update()
+
+	if got, want := b.q(), (q{pressed: true, justPressed: true, duration: 1}); got != want {
+		t.Errorf("a physical press alone: the input says %+v, want %+v", got, want)
 	}
 
-	// The finger joins a key that is already down: no new press.
-	physical.tick()
-	touch.down = true
-	keyboard.Update()
+	b.tick()
+	b.touch.down = true
+	b.keyboard.Update()
 
-	if !input.IsKeyPressed(ebiten.KeyQ) || input.IsKeyJustPressed(ebiten.KeyQ) {
-		t.Error("touching a key that is physically down must not press it again")
+	if got, want := b.q(), (q{pressed: true, duration: 2}); got != want {
+		t.Errorf("the finger joins a key that is physically down: the input says %+v, want %+v", got, want)
 	}
 
-	if got := input.KeyPressDuration(ebiten.KeyQ); got != 2 {
-		t.Errorf("the key has been down for two ticks, the duration is %d", got)
+	b.tick()
+	b.physical.release(ebiten.KeyQ)
+	b.keyboard.Update()
+
+	if got, want := b.q(), (q{pressed: true, duration: 3}); got != want {
+		t.Errorf("the physical key goes up under the finger: the input says %+v, want %+v", got, want)
 	}
 
-	// The physical key goes up; the finger still holds it.
-	physical.tick()
-	physical.release(ebiten.KeyQ)
-	keyboard.Update()
+	b.tick()
+	b.touch.down = false
+	b.keyboard.Update()
 
-	if !input.IsKeyPressed(ebiten.KeyQ) || input.IsKeyJustReleased(ebiten.KeyQ) {
-		t.Error("a key the finger still holds must stay pressed when the physical one goes up")
+	if got, want := b.q(), (q{justReleased: true}); got != want {
+		t.Errorf("the finger lifts last: the input says %+v, want %+v", got, want)
 	}
 
-	// The finger lifts: now it is released.
-	physical.tick()
-	touch.down = false
-	keyboard.Update()
-
-	if input.IsKeyPressed(ebiten.KeyQ) || !input.IsKeyJustReleased(ebiten.KeyQ) {
-		t.Error("the key must be released when both have let go")
-	}
-
-	if got := input.AppendJustReleasedKeys(nil); len(got) != 1 || got[0] != ebiten.KeyQ {
+	if got := b.input.AppendJustReleasedKeys(nil); len(got) != 1 || got[0] != ebiten.KeyQ {
 		t.Errorf("the keys just released are %v, want [Q]", got)
 	}
+
+	b.tick()
+	b.keyboard.Update()
+
+	if got := b.q(); got != (q{}) {
+		t.Errorf("the tick after the release the input still says %+v", got)
+	}
 }
 
-func TestAPhysicalReleaseEndsAPressTheFingerLeftFirst(t *testing.T) {
-	physical, touch, keyboard, input := both(t)
+func TestAHoldThatPassesFromTheScreenToThePhysicalKeyIsOneHold(t *testing.T) {
+	b := newBoth(t)
 
-	touch.down = true
-	keyboard.Update()
+	b.touch.down = true
+	b.keyboard.Update()
 
-	physical.tick()
-	physical.press(ebiten.KeyQ, 'q')
-	keyboard.Update()
-
-	if input.IsKeyJustPressed(ebiten.KeyQ) {
-		t.Error("a physical press of a key the finger holds must not press it again")
+	if got, want := b.q(), (q{pressed: true, justPressed: true, duration: 1}); got != want {
+		t.Errorf("a touch alone: the input says %+v, want %+v", got, want)
 	}
 
-	physical.tick()
-	touch.down = false
-	keyboard.Update()
+	b.tick()
+	b.physical.press(ebiten.KeyQ, 'q')
+	b.keyboard.Update()
 
-	if !input.IsKeyPressed(ebiten.KeyQ) || input.IsKeyJustReleased(ebiten.KeyQ) {
-		t.Error("a key that is physically down must stay pressed when the finger lifts")
+	if got, want := b.q(), (q{pressed: true, duration: 2}); got != want {
+		t.Errorf("the physical key joins a key the finger holds: the input says %+v, want %+v", got, want)
 	}
 
-	physical.tick()
-	physical.release(ebiten.KeyQ)
-	keyboard.Update()
+	b.tick()
+	b.touch.down = false
+	b.keyboard.Update()
 
-	if !input.IsKeyJustReleased(ebiten.KeyQ) {
-		t.Error("the key must be released when the physical one goes up last")
+	if got, want := b.q(), (q{pressed: true, duration: 3}); got != want {
+		t.Errorf("the finger lifts off a key that is physically down: the input says %+v, want %+v", got, want)
+	}
+
+	b.tick()
+	b.keyboard.Update()
+
+	if got, want := b.q(), (q{pressed: true, duration: 4}); got != want {
+		t.Errorf("the physical key holds on alone: the input says %+v, want %+v", got, want)
+	}
+
+	// The finger comes back: still the same hold.
+	b.tick()
+	b.touch.down = true
+	b.keyboard.Update()
+
+	if got, want := b.q(), (q{pressed: true, duration: 5}); got != want {
+		t.Errorf("the finger comes back to the held key: the input says %+v, want %+v", got, want)
+	}
+
+	b.tick()
+	b.touch.down = false
+	b.physical.release(ebiten.KeyQ)
+	b.keyboard.Update()
+
+	if got, want := b.q(), (q{justReleased: true}); got != want {
+		t.Errorf("both let go in one tick: the input says %+v, want %+v", got, want)
+	}
+
+	// A new physical press is a new hold: nothing of the old one is left in its duration.
+	b.tick()
+	b.physical.press(ebiten.KeyQ, 'q')
+	b.keyboard.Update()
+
+	if got, want := b.q(), (q{pressed: true, justPressed: true, duration: 1}); got != want {
+		t.Errorf("a new physical press after the hold: the input says %+v, want %+v", got, want)
+	}
+}
+
+func TestAPhysicalKeyTappedBetweenTwoTicksKeepsBothItsEdges(t *testing.T) {
+	b := newBoth(t)
+
+	b.keyboard.Update()
+
+	// Down and up before the game's next update, as a quick backspace is.
+	b.tick()
+	b.physical.press(ebiten.KeyQ, 'q')
+	b.physical.release(ebiten.KeyQ)
+	b.keyboard.Update()
+
+	if got, want := b.q(), (q{pressed: true, justPressed: true, justReleased: true}); got != want {
+		t.Errorf("a physical tap within one tick: the input says %+v, want %+v, as Ebitengine does", got, want)
+	}
+
+	b.tick()
+	b.keyboard.Update()
+
+	if got := b.q(); got != (q{}) {
+		t.Errorf("the tick after the tap the input still says %+v", got)
 	}
 }
 
 func TestTheCharactersOfBothKeyboardsArriveInTheirTick(t *testing.T) {
-	physical, touch, keyboard, input := both(t)
+	b := newBoth(t)
 
-	physical.press(ebiten.KeyA, 'a')
-	touch.down = true
-	keyboard.Update()
+	b.physical.press(ebiten.KeyA, 'a')
+	b.touch.down = true
+	b.keyboard.Update()
 
-	if got := string(input.AppendInputChars([]rune("…"))); got != "…aq" {
+	if got := string(b.input.AppendInputChars([]rune("…"))); got != "…aq" {
 		t.Errorf("the input gave %q, want what was there, then the physical a, then the q on the screen", got)
 	}
 
-	physical.tick()
-	keyboard.Update()
+	b.tick()
+	b.keyboard.Update()
 
-	if got := string(input.AppendInputChars(nil)); got != "" {
+	if got := string(b.input.AppendInputChars(nil)); got != "" {
 		t.Errorf("the tick after, the input still gave %q", got)
 	}
 }
 
-func TestAKeyEbitengineDoesNotKnowIsNeverPressed(t *testing.T) {
-	_, touch, keyboard, input := both(t)
+func TestAKeyboardThatIsNoLongerUpdatedLetsGoOfItsKeys(t *testing.T) {
+	b := newBoth(t)
 
-	touch.down = true
-	keyboard.Update()
+	b.touch.down = true
+	b.keyboard.Update()
+
+	// The game drops the keyboard with the finger on it, in the tick after it typed, and
+	// updates another in its place.
+	other, err := New(Layout{Layers: []Layer{{Rows: [][]Key{{{Do: Type("w")}}}}}}, WithPointers(&finger{}), WithInput(b.input))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	b.tick()
+	other.Update()
+
+	if got, want := b.q(), (q{justReleased: true}); got != want {
+		t.Errorf("the tick its keyboard is dropped, the input says of the key it held %+v, want %+v", got, want)
+	}
+
+	if got := string(b.input.AppendInputChars(nil)); got != "" {
+		t.Errorf("the dropped keyboard's character arrived again: %q", got)
+	}
+
+	b.tick()
+	other.Update()
+
+	if got := b.q(); got != (q{}) {
+		t.Errorf("two ticks after its keyboard was dropped, the input still says %+v", got)
+	}
+
+	// Updated again, the keyboard is heard again. Its finger never lifted: it holds the key.
+	b.tick()
+	b.keyboard.Update()
+	other.Update()
+
+	if got := b.q(); !got.pressed {
+		t.Errorf("a keyboard that is updated again is not heard: the input says %+v", got)
+	}
+}
+
+func TestAKeyEbitengineDoesNotKnowIsNeverPressed(t *testing.T) {
+	b := newBoth(t)
+
+	b.touch.down = true
+	b.keyboard.Update()
 
 	for _, key := range []ebiten.Key{-1, ebiten.KeyMax + 1} {
-		if input.IsKeyPressed(key) || input.IsKeyJustPressed(key) || input.IsKeyJustReleased(key) || input.KeyPressDuration(key) != 0 {
+		if b.input.IsKeyPressed(key) || b.input.IsKeyJustPressed(key) || b.input.IsKeyJustReleased(key) || b.input.KeyPressDuration(key) != 0 {
 			t.Errorf("the key %d, which Ebitengine does not have, is reported as pressed or released", key)
 		}
 	}
@@ -211,53 +346,5 @@ func TestAPositionEbitengineDoesNotKnowIsTextOnly(t *testing.T) {
 
 	if got := string(input.AppendInputChars(nil)); got != "x" {
 		t.Errorf("the key typed %q, want x", got)
-	}
-}
-
-func TestAnInputStopsHearingAKeyboardThatIsNoLongerUpdated(t *testing.T) {
-	_, touch, keyboard, input := both(t)
-
-	now := int64(10)
-	input.tick = func() int64 { return now }
-
-	touch.down = true
-	keyboard.Update()
-
-	// A game that reads before it updates its keyboard hears it a tick late.
-	now++
-
-	if !input.IsKeyPressed(ebiten.KeyQ) || string(input.AppendInputChars(nil)) != "q" {
-		t.Error("the tick after its update, a keyboard must still be heard")
-	}
-
-	// The game dropped the keyboard with a finger on it: the key must not stay down for ever.
-	now++
-
-	if input.IsKeyPressed(ebiten.KeyQ) || input.KeyPressDuration(ebiten.KeyQ) != 0 || len(input.AppendInputChars(nil)) != 0 {
-		t.Error("two ticks after its last update, a keyboard is still heard")
-	}
-
-	if len(input.AppendJustPressedKeys(nil)) != 0 {
-		t.Error("a keyboard that is no longer heard pressed a key")
-	}
-
-	// Another keyboard takes its place: the dropped one is forgotten, not kept.
-	other, err := New(Layout{Layers: []Layer{{Rows: [][]Key{{{Do: Type("w")}}}}}}, WithPointers(&finger{}), WithInput(input))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	other.Update()
-	other.Update()
-
-	if len(input.keyboards) != 1 || input.keyboards[0] != other {
-		t.Errorf("the input keeps %d keyboards, want only the one still updated", len(input.keyboards))
-	}
-
-	// Updated again, the first one is heard again.
-	keyboard.Update()
-
-	if !input.IsKeyPressed(ebiten.KeyQ) {
-		t.Error("a keyboard that is updated again must be heard again")
 	}
 }
