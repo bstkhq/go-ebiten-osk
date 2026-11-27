@@ -17,7 +17,8 @@ import (
 // key it held.
 //
 // The package's functions of the same names answer from a default Input that every keyboard
-// feeds unless it is made [WithInput] another.
+// feeds unless it is made [WithInput] another. Make one with [NewInput]: the zero value is not
+// ready for use.
 type Input struct {
 	physical physical
 

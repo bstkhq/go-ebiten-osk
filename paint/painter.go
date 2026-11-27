@@ -27,8 +27,13 @@ type Painter struct {
 	keys   []osk.PlacedKey
 }
 
-// New is a painter of the theme.
+// New is a painter of the theme. A theme with no font draws its labels in the stock themes'
+// Go Bold.
 func New(theme Theme) *Painter {
+	if theme.Font == nil {
+		theme.Font = goBold()
+	}
+
 	text := etxt.NewRenderer()
 	text.SetAlign(etxt.Center)
 
@@ -88,11 +93,16 @@ func (p *Painter) drawKey(dst *ebiten.Image, key osk.PlacedKey) {
 	p.drawLabel(dst, key.Face(), face, row)
 }
 
-// drawLabel draws a key's label in the middle of its face, smaller if it would not fit.
+// drawLabel draws a key's label in the middle of its face, smaller if it would not fit. A
+// theme that gives labels no size draws none.
 func (p *Painter) drawLabel(dst *ebiten.Image, label string, face image.Rectangle, row float64) {
 	size := p.theme.CharacterSize * row
 	if utf8.RuneCountInString(label) > 1 {
 		size = p.theme.WordSize * row
+	}
+
+	if size <= 0 {
+		return
 	}
 
 	p.text.SetSize(size)

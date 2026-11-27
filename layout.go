@@ -153,6 +153,11 @@ func (a Action) position(positions Positions) (ebiten.Key, bool) {
 
 	key, ok := positions[runes[0]]
 
+	// A modifier named for either side has no key of its own: it stands for the left one.
+	if both, named := sides[key]; named {
+		key = both[0]
+	}
+
 	return key, ok && key >= 0 && key <= ebiten.KeyMax
 }
 

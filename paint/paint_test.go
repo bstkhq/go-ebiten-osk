@@ -225,6 +225,52 @@ func TestALabelTheFontLacksIsDrawnWithoutStoppingTheGame(t *testing.T) {
 	}
 }
 
+func TestAThemeMadeFromScratchStillDrawsABoard(t *testing.T) {
+	d := ebitenmcp.T(t)
+
+	// Against the advice to start from a stock theme: two colours, and no font or size.
+	bare := paint.Theme{Key: color.RGBA{0x20, 0x60, 0x20, 0xff}, Label: color.RGBA{0xff, 0xff, 0xff, 0xff}}
+	g := face(t, d, "G")
+
+	d.WithGame(func(game ebiten.Game) { game.(*board).painter = paint.New(bare) })
+	d.Tick(3)
+
+	screen := d.Screenshot()
+
+	if got := colourAt(screen, g); got != bare.Key {
+		t.Errorf("a theme with only a key colour draws a key's face %v, want %v", got, bare.Key)
+	}
+
+	if lit := labelInk(screen, bare.Label); lit != 0 {
+		t.Errorf("a theme that gives labels no size drew %d pixels of label", lit)
+	}
+
+	// With a size and still no font, the labels are in Go Bold.
+	bare.CharacterSize = 0.4
+
+	d.WithGame(func(game ebiten.Game) { game.(*board).painter = paint.New(bare) })
+	d.Tick(2)
+
+	if lit := labelInk(d.Screenshot(), bare.Label); lit == 0 {
+		t.Error("a theme with a label size and no font drew no label")
+	}
+}
+
+// labelInk counts the pixels of exactly the label's colour on the board.
+func labelInk(screen *image.RGBA, label color.RGBA) int {
+	count := 0
+
+	for y := boardTop; y < screenH; y++ {
+		for x := range screenW {
+			if colourAt(screen, image.Pt(x, y)) == label {
+				count++
+			}
+		}
+	}
+
+	return count
+}
+
 func TestAHiddenKeyboardIsNotDrawn(t *testing.T) {
 	d := ebitenmcp.T(t)
 

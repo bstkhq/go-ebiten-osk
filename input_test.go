@@ -598,9 +598,11 @@ func TestAModifierNamedForEitherSideIsPressedWithOneOfItsKeysOnTheScreen(t *test
 	touch := &finger{down: true, x: 10, y: 10}
 	input, _ := SteppedInput()
 
+	// The first key is at the left shift's position. The second names control for either
+	// side, which is no key: it stands for the left one.
 	keyboard, err := New(Layout{
-		Positions: Positions{'⇧': ebiten.KeyShiftLeft},
-		Layers:    []Layer{{Rows: [][]Key{{{Do: Type("⇧")}}}}},
+		Positions: Positions{'⇧': ebiten.KeyShiftLeft, '⌃': ebiten.KeyControl},
+		Layers:    []Layer{{Rows: [][]Key{{{Do: Type("⇧")}, {Do: Type("⌃")}}}}},
 	}, WithPointers(touch), WithInput(input))
 	if err != nil {
 		t.Fatal(err)
@@ -621,5 +623,17 @@ func TestAModifierNamedForEitherSideIsPressedWithOneOfItsKeysOnTheScreen(t *test
 
 	if input.IsKeyPressed(ebiten.KeyShiftRight) || input.IsKeyPressed(ebiten.KeyControl) {
 		t.Error("a key at the left shift's position pressed the right shift or control")
+	}
+
+	touch.x = 60
+	touch.down = false
+	keyboard.Update()
+
+	touch.down = true
+	keyboard.Update()
+
+	if !input.IsKeyPressed(ebiten.KeyControlLeft) || !input.IsKeyPressed(ebiten.KeyControl) || input.IsKeyPressed(ebiten.KeyControlRight) {
+		t.Errorf("a key that names control for either side: left control pressed %t, control pressed %t, right control pressed %t, want the left one and the name",
+			input.IsKeyPressed(ebiten.KeyControlLeft), input.IsKeyPressed(ebiten.KeyControl), input.IsKeyPressed(ebiten.KeyControlRight))
 	}
 }
