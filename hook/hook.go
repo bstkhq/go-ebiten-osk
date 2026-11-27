@@ -13,7 +13,7 @@ import (
 
 const engine = "github.com/hajimehoshi/ebiten/v2"
 
-var errDisabled = errors.New("Ebitengine input hook compiled out with ebitenosk_nohook")
+var errDisabled = errors.New("input hook compiled out with ebitenosk_nohook")
 
 type engineBackend struct {
 	verify func() error
@@ -55,10 +55,10 @@ func engineVersion(info *debug.BuildInfo) string {
 
 func newHook(version string) (*Hook, error) {
 	if !supportedVersion(version) {
-		return nil, fmt.Errorf("Ebitengine input hook supports v2.9.x releases, found %q", version)
+		return nil, fmt.Errorf("input hook supports Ebitengine v2.9.x releases, found %q", version)
 	}
 	if err := backend.verify(); err != nil {
-		return nil, fmt.Errorf("Ebitengine %s input hook self-check: %w", version, err)
+		return nil, fmt.Errorf("input hook self-check for Ebitengine %s: %w", version, err)
 	}
 	return &Hook{applied: -1, pending: frame{tick: -1}}, nil
 }
