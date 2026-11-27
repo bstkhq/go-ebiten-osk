@@ -74,6 +74,18 @@ go vet ./...
 go run github.com/bstkhq/go-ebiten-mcp/cmd/ebitenmcp run --x local --addr "" -- go test -count=1 ./...
 ```
 
+When the checkout contains tests in `hook/internal/upstream`, run the declaration check separately with no display.
+
+```sh
+env -u DISPLAY -u WAYLAND_DISPLAY go test -count=1 ./hook/internal/upstream
+```
+
+When `hook/nohook.go` is present, also run the suite with the hook compiled out.
+
+```sh
+go run github.com/bstkhq/go-ebiten-mcp/cmd/ebitenmcp run --x local --addr "" -- go test -count=1 -tags ebitenosk_nohook ./...
+```
+
 With golangci-lint v2.15.0 installed and `origin/main` fetched, run the same advisory report and changed-line check as on a topic branch.
 
 ```sh
