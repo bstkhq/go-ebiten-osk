@@ -193,6 +193,38 @@ func TestALabelTooWideForItsKeyIsDrawnSmallerNotCut(t *testing.T) {
 	}
 }
 
+func TestALabelTheFontLacksIsDrawnWithoutStoppingTheGame(t *testing.T) {
+	d := ebitenmcp.T(t)
+
+	// Go Bold has no Hebrew: a layout of a game's own may ask for a letter the theme's font
+	// cannot draw.
+	foreign := osk.Layout{Layers: []osk.Layer{{Rows: [][]osk.Key{{
+		{Do: osk.Type("א")},
+		{Do: osk.Type("x")},
+	}}}}}
+
+	d.WithGame(func(game ebiten.Game) {
+		keyboard, err := osk.New(foreign)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		keyboard.SetRect(image.Rect(0, boardTop, screenW, screenH))
+		game.(*board).keyboard = keyboard
+	})
+
+	// The driver fails the test if the game panics while it draws these frames.
+	d.Tick(3)
+
+	if got := colourAt(d.Screenshot(), image.Pt(20, boardTop+120)); got != paint.Dark().Key {
+		t.Errorf("the key with a label the font lacks has a face of %v, want the theme's %v", got, paint.Dark().Key)
+	}
+
+	if got := colourAt(d.Screenshot(), image.Pt(screenW-20, boardTop+120)); got != paint.Dark().Key {
+		t.Errorf("the key beside it has a face of %v, want the theme's %v", got, paint.Dark().Key)
+	}
+}
+
 func TestAHiddenKeyboardIsNotDrawn(t *testing.T) {
 	d := ebitenmcp.T(t)
 

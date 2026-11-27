@@ -45,6 +45,26 @@ func TestTheExampleTypesItsLineFromTheScreenAndFromTheKeyboard(t *testing.T) {
 	}
 }
 
+func TestTheExampleDrawsACharacterItsFontLacks(t *testing.T) {
+	d := ebitenmcp.T(t)
+
+	// A Hebrew keyboard types a letter Go Bold has no glyph for.
+	d.Type("א")
+
+	// The driver fails the test if the game panics while it draws these frames.
+	d.Tick(3)
+
+	d.WithGame(func(g ebiten.Game) {
+		if got := string(g.(*game).line); got != "א" {
+			t.Errorf("a letter the font lacks left the line %q, want the letter kept", got)
+		}
+	})
+
+	if inked(d.Screenshot()) == 0 {
+		t.Error("with a letter the font lacks in its line, the example draws nothing")
+	}
+}
+
 // inked counts the pixels of the text's colour above the keyboard.
 func inked(screen *image.RGBA) int {
 	count := 0

@@ -489,3 +489,137 @@ func TestAPositionEbitengineDoesNotKnowIsTextOnly(t *testing.T) {
 		t.Errorf("the key typed %q, want x", got)
 	}
 }
+
+func TestAPhysicalKeyReleasedAndPressedAgainBetweenTwoTicksIsANewHold(t *testing.T) {
+	b := newBoth(t)
+
+	b.physical.press(ebiten.KeyQ, 'q')
+	b.keyboard.Update()
+
+	for range 6 {
+		b.tick()
+		b.keyboard.Update()
+	}
+
+	if got, want := b.q(), (q{pressed: true, duration: 7}); got != want {
+		t.Fatalf("a physical key held for seven ticks: the input says %+v, want %+v", got, want)
+	}
+
+	// Up and down again before the next update: Ebitengine tells of a new press, one tick
+	// old, and of the release before it. Nothing on the screen held the key meanwhile.
+	b.tick()
+	b.physical.release(ebiten.KeyQ)
+	b.physical.press(ebiten.KeyQ, 'q')
+	b.keyboard.Update()
+
+	if got, want := b.q(), (q{pressed: true, justPressed: true, justReleased: true, duration: 1}); got != want {
+		t.Errorf("a physical key released and pressed again within a tick: the input says %+v, want %+v, as Ebitengine does", got, want)
+	}
+
+	b.tick()
+	b.keyboard.Update()
+
+	if got, want := b.q(), (q{pressed: true, duration: 2}); got != want {
+		t.Errorf("the tick after: the input says %+v, want %+v", got, want)
+	}
+}
+
+func TestAPhysicalKeyPressedAgainUnderAFingerStaysOneHold(t *testing.T) {
+	b := newBoth(t)
+
+	b.physical.press(ebiten.KeyQ, 'q')
+	b.touch.down = true
+	b.keyboard.Update()
+
+	b.tick()
+	b.keyboard.Update()
+
+	// The physical key goes up and down again while the finger holds the key on the screen:
+	// to a game the key was never up.
+	b.tick()
+	b.physical.release(ebiten.KeyQ)
+	b.physical.press(ebiten.KeyQ, 'q')
+	b.keyboard.Update()
+
+	if got, want := b.q(), (q{pressed: true, duration: 3}); got != want {
+		t.Errorf("a physical key pressed again under a finger: the input says %+v, want %+v", got, want)
+	}
+}
+
+func TestAHoldAGameWatchedWithNoKeyboardPassesToTheOneThatComes(t *testing.T) {
+	b := newBoth(t)
+
+	// The text field is closed: the game has no keyboard to update, and reads the input every
+	// tick while the physical key is held.
+	b.physical.press(ebiten.KeyQ, 'q')
+
+	for held := 1; held <= 6; held++ {
+		if got, want := b.q(), (q{pressed: true, justPressed: held == 1, duration: held}); got != want {
+			t.Fatalf("tick %d of a physical hold with no keyboard: the input says %+v, want %+v", held, got, want)
+		}
+
+		b.tick()
+	}
+
+	// The field opens: its keyboard's first update comes with the finger on the key, in the
+	// tick the physical key goes up.
+	b.physical.release(ebiten.KeyQ)
+	b.touch.down = true
+	b.keyboard.Update()
+
+	if got, want := b.q(), (q{pressed: true, duration: 7}); got != want {
+		t.Errorf("the hold passes to a keyboard that was not there before: the input says %+v, want %+v", got, want)
+	}
+}
+
+func TestAHoldNobodyWatchedPassesToTheScreenWithNoNewPress(t *testing.T) {
+	b := newBoth(t)
+
+	// The game neither reads the input nor updates a keyboard while the physical key is
+	// held: nothing tells the input since when.
+	b.physical.press(ebiten.KeyQ, 'q')
+
+	for range 6 {
+		b.tick()
+	}
+
+	b.physical.release(ebiten.KeyQ)
+	b.touch.down = true
+	b.keyboard.Update()
+
+	// It was down when the tick before ended, so this is no new press: the hold is as old
+	// as the input can vouch for.
+	if got, want := b.q(), (q{pressed: true, duration: 2}); got != want {
+		t.Errorf("a hold nobody watched passes to the screen: the input says %+v, want %+v", got, want)
+	}
+}
+
+func TestAModifierNamedForEitherSideIsPressedWithOneOfItsKeysOnTheScreen(t *testing.T) {
+	touch := &finger{down: true, x: 10, y: 10}
+	input, _ := SteppedInput()
+
+	keyboard, err := New(Layout{
+		Positions: Positions{'⇧': ebiten.KeyShiftLeft},
+		Layers:    []Layer{{Rows: [][]Key{{{Do: Type("⇧")}}}}},
+	}, WithPointers(touch), WithInput(input))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	keyboard.SetRect(image.Rect(0, 0, 100, 100))
+
+	if input.IsKeyPressed(ebiten.KeyShift) {
+		t.Fatal("shift is pressed before anything touched it")
+	}
+
+	keyboard.Update()
+
+	if !input.IsKeyPressed(ebiten.KeyShiftLeft) || !input.IsKeyPressed(ebiten.KeyShift) {
+		t.Errorf("a key at the left shift's position: left shift pressed %t, shift pressed %t, want both",
+			input.IsKeyPressed(ebiten.KeyShiftLeft), input.IsKeyPressed(ebiten.KeyShift))
+	}
+
+	if input.IsKeyPressed(ebiten.KeyShiftRight) || input.IsKeyPressed(ebiten.KeyControl) {
+		t.Error("a key at the left shift's position pressed the right shift or control")
+	}
+}

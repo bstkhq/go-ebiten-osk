@@ -59,6 +59,10 @@ func newGame() (*game, error) {
 	text.SetColor(ink)
 	text.SetAlign(etxt.Center)
 
+	// The physical keyboard types what it likes: a character the font lacks is drawn as the
+	// font's mark for a missing one, where etxt would otherwise panic.
+	text.Glyph().SetMissHandler(etxt.OnMissNotdef)
+
 	return &game{keyboard: keyboard, painter: paint.New(theme), text: text}, nil
 }
 

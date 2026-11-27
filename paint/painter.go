@@ -32,6 +32,10 @@ func New(theme Theme) *Painter {
 	text := etxt.NewRenderer()
 	text.SetAlign(etxt.Center)
 
+	// A label is the layout's, and a layout may be a game's own: a character the theme's
+	// font lacks is drawn as that font's mark for a missing one, not a panic in Draw.
+	text.Glyph().SetMissHandler(etxt.OnMissNotdef)
+
 	// A cache of its own: etxt's shared one tells fonts apart by their address, and hands
 	// a font parsed where another was freed that other's glyphs.
 	text.SetCacheHandler(cache.NewDefaultCache(glyphCacheBytes).NewHandler())

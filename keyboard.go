@@ -68,13 +68,13 @@ type options struct {
 }
 
 // WithPointers makes the keyboard read its pointers from somewhere other than Ebitengine's
-// touches and mouse.
+// touches and mouse. With nil it reads Ebitengine's.
 func WithPointers(pointers Pointers) Option {
 	return func(o *options) { o.pointers = pointers }
 }
 
 // WithInput makes the keyboard feed input instead of the default one, the one the package's
-// own functions answer from.
+// own functions answer from. With nil it feeds the default one.
 func WithInput(input *Input) Option {
 	return func(o *options) { o.input = input }
 }
@@ -89,9 +89,17 @@ func New(layout Layout, opts ...Option) (*Keyboard, error) {
 
 	layout = layout.clone()
 
-	o := options{pointers: &screen{}, input: defaultInput}
+	var o options
 	for _, opt := range opts {
 		opt(&o)
+	}
+
+	if o.pointers == nil {
+		o.pointers = &screen{}
+	}
+
+	if o.input == nil {
+		o.input = defaultInput
 	}
 
 	k := &Keyboard{layout: layout, pointers: o.pointers, input: o.input, landed: map[PointerID]int{}}
