@@ -15,7 +15,7 @@ import (
 	"testing"
 )
 
-// Adapted from go-ebiten-mcp v0.3.2 (MIT). See ../../LICENSE.go-ebiten-mcp.
+// Adapted from go-ebiten-mcp v0.3.2 (MIT). See ../../LICENSE.
 
 const module = "github.com/hajimehoshi/ebiten/v2"
 

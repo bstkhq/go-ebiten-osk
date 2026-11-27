@@ -8,7 +8,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
-// Adapted from go-ebiten-mcp v0.3.2 (MIT). See LICENSE.go-ebiten-mcp.
+// Adapted from go-ebiten-mcp v0.3.2 (MIT). See LICENSE.
 
 // Supported reports whether the engine integration was included in this build.
 // New also checks the linked version and whether the integration works.

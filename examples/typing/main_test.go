@@ -10,7 +10,7 @@ import (
 
 func TestMain(m *testing.M) {
 	ebitenmcp.RunTests(m, func() ebiten.Game {
-		g, err := newGame()
+		g, err := newGame(false)
 		if err != nil {
 			panic(err)
 		}

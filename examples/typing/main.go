@@ -42,12 +42,20 @@ type game struct {
 	hook     *hook.Hook
 }
 
-func newGame(opts ...osk.Option) (*game, error) {
+func newGame(useHook bool) (*game, error) {
+	h, err := selectHook(useHook)
+	if err != nil {
+		return nil, err
+	}
 	layout, err := osk.Stock(osk.EnUS, osk.Compact)
 	if err != nil {
 		return nil, err
 	}
 
+	var opts []osk.Option
+	if h != nil {
+		opts = append(opts, h.Option())
+	}
 	keyboard, err := osk.New(layout, opts...)
 	if err != nil {
 		return nil, err
@@ -67,7 +75,14 @@ func newGame(opts ...osk.Option) (*game, error) {
 	// font's mark for a missing one, where etxt would otherwise panic.
 	text.Glyph().SetMissHandler(etxt.OnMissNotdef)
 
-	return &game{keyboard: keyboard, painter: paint.New(theme), text: text}, nil
+	return &game{keyboard: keyboard, painter: paint.New(theme), text: text, hook: h}, nil
+}
+
+func selectHook(enabled bool) (*hook.Hook, error) {
+	if enabled {
+		return hook.New()
+	}
+	return nil, nil
 }
 
 // Update reads the keyboard exactly as a game reads a physical one, with osk in the place of
@@ -100,21 +115,10 @@ func (g *game) Layout(int, int) (int, int) {
 }
 
 func run(useHook bool) error {
-	var h *hook.Hook
-	var opts []osk.Option
-	if useHook {
-		var err error
-		h, err = hook.New()
-		if err != nil {
-			return err
-		}
-		opts = append(opts, h.Option())
-	}
-	g, err := newGame(opts...)
+	g, err := newGame(useHook)
 	if err != nil {
 		return err
 	}
-	g.hook = h
 
 	ebiten.SetWindowSize(width, height)
 	ebiten.SetWindowTitle("go-ebiten-osk: typing")

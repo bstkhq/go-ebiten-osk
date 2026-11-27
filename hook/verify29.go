@@ -9,7 +9,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
 
-// Adapted from go-ebiten-mcp v0.3.2 (MIT). See LICENSE.go-ebiten-mcp.
+// Adapted from go-ebiten-mcp v0.3.2 (MIT). See LICENSE.
 
 func verify() error {
 	if err := verifyKeys(); err != nil {
