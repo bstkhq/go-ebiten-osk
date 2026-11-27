@@ -60,15 +60,19 @@ Built and tested against Ebitengine v2.9.9. The API will change until the first 
 
 ## Tests
 
-The checks build and vet the module, then run the tests with a private display from [go-ebiten-mcp](https://github.com/bstkhq/go-ebiten-mcp). On Linux, install the [Ebitengine build dependencies](https://ebitengine.org/en/documents/install.html), Xvfb, and Mesa to reproduce the CI run in software.
+The suite needs a display, as anything that links Ebitengine does. With [go-ebiten-mcp](https://github.com/bstkhq/go-ebiten-mcp), on the GPU:
+
+```sh
+ebitenmcp run --gpu -- go test ./...
+```
+
+GitHub Actions uses a private display with software rendering and compares the golden pictures with the driver's tolerance. On Linux, install the [Ebitengine build dependencies](https://ebitengine.org/en/documents/install.html), Xvfb, and Mesa to run the same checks locally.
 
 ```sh
 go build ./...
 go vet ./...
 go run github.com/bstkhq/go-ebiten-mcp/cmd/ebitenmcp run --x local --addr "" -- go test -count=1 ./...
 ```
-
-For a hardware-backed display on Linux, replace `run --x local` with `run --gpu`. CI compares the golden pictures on its software renderer using the driver's tolerance. Each golden under `testdata` names its recording renderer, which the driver reports if a comparison fails across renderers.
 
 With golangci-lint v2.15.0 installed and `origin/main` fetched, run the same advisory report and changed-line check as on a topic branch.
 
@@ -78,6 +82,8 @@ golangci-lint run --new-from-merge-base=origin/main
 ```
 
 The changed-line check uses committed changes. On `main`, CI reports lint findings across the module.
+
+The golden pictures under `testdata` were drawn by a hardware renderer, named beside each one: a software renderer may not match them to the pixel.
 
 ## Licence
 
