@@ -19,10 +19,10 @@ func verify() error {
 }
 
 func verifyKeys() error {
-	// Probe near the end of both arrays, where a change to their lengths
-	// is most likely to be visible. Restore the original stamps even if
-	// Tab was down before the probe.
-	const key = ebiten.KeyTab
+	key, err := idleProbeKey()
+	if err != nil {
+		return err
+	}
 	var pressed, released inputTime
 	update(func(s *inputState) {
 		pressed, released = s.KeyPressedTimes[key], s.KeyReleasedTimes[key]
@@ -34,11 +34,22 @@ func verifyKeys() error {
 	if !ebiten.IsKeyPressed(key) || !inpututil.IsKeyJustPressed(key) || inpututil.KeyPressDuration(key) != 1 {
 		return errors.New("press stamp did not reach Ebitengine's current tick")
 	}
-	update(func(s *inputState) { s.KeyReleasedTimes[key] = stamp() })
+	update(func(s *inputState) { s.KeyReleasedTimes[key] = stamp() + 1 })
 	if !inpututil.IsKeyJustReleased(key) || inpututil.KeyPressDuration(key) != 0 {
 		return errors.New("release stamp did not reach Ebitengine's current tick")
 	}
 	return nil
+}
+
+func idleProbeKey() (ebiten.Key, error) {
+	// Start at the highest physical key so changes to the length of either
+	// array are most likely to show up. Skip keys with current input.
+	for key := ebiten.KeyTab; key >= 0; key-- {
+		if !ebiten.IsKeyPressed(key) && !inpututil.IsKeyJustReleased(key) {
+			return key, nil
+		}
+	}
+	return 0, errors.New("no idle physical key for the input probe")
 }
 
 func verifyRunes() error {

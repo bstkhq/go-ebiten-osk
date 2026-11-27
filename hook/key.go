@@ -19,7 +19,7 @@ func (k keyUpdate) apply(previous inputTime, pressed, released *inputTime) input
 	}
 	if k.pressed {
 		*pressed = stamp()
-		*released = stamp()
+		*released = *pressed + 1
 	} else if previous != 0 {
 		*pressed = previous
 		*released = stamp()
@@ -33,7 +33,7 @@ func (k keyUpdate) hold(previous inputTime, pressed, released *inputTime) inputT
 		*pressed, *released = startHold(*pressed, *released)
 	case k.restarted == k.holders:
 		*released = stamp()
-		*pressed = stamp()
+		*pressed = *released + 1
 	default:
 		// The backend restored the hardware snapshot at the start
 		// of this tick. Restore the ongoing press and hide any physical
@@ -50,9 +50,5 @@ func startHold(pressed, released inputTime) (inputTime, inputTime) {
 		// A physical hold handed off to a new on-screen hold in this tick.
 		return pressed, 0
 	}
-	return stamp(), released
-}
-
-func (t inputTime) tick() int64 {
-	return int64(t >> 20)
+	return stamp() + 1, released
 }

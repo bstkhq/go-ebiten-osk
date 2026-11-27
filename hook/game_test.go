@@ -5,6 +5,8 @@ package hook
 import (
 	"context"
 	"image"
+	"os/exec"
+	"path/filepath"
 	"slices"
 	"testing"
 	"time"
@@ -188,6 +190,55 @@ func TestPhysicalHoldPassesToScreenWhenPhysicalKeyLiftsFirst(t *testing.T) {
 	d.Tick(3)
 	reads, _, _ := observed(t, d)
 	checkOneHold(t, reads)
+}
+
+func TestPhysicalPressTakesPriorityOverAnOnScreenHold(t *testing.T) {
+	d := driver.T(t)
+	at := keyCenter(t, d)
+	input := d.Runtime().Injector()
+	input.SetTouches([]driver.Touch{{ID: 7, X: at.X, Y: at.Y}})
+	d.Tick(4)
+	input.KeyDown(ebiten.KeyH)
+	d.Tick(4)
+	input.SetTouches(nil)
+	d.Tick(4)
+	input.KeyUp(ebiten.KeyH)
+	d.Tick(3)
+
+	reads, _, _ := observed(t, d)
+	var presses, releases int
+	for i, read := range reads {
+		if read.justPressed {
+			presses++
+			if !read.pressed || read.duration != 1 {
+				t.Errorf("press does not start at duration 1: %+v", read)
+			}
+			if presses == 2 && (i == 0 || reads[i-1].duration < 3 || read.text != "") {
+				t.Errorf("physical press did not take over the on-screen hold: %v", reads)
+			}
+		}
+		if read.justReleased {
+			releases++
+			if i == 0 || reads[i-1].duration < 5 {
+				t.Errorf("the key went up before the physical hold ended: %v", reads)
+			}
+		}
+	}
+	if presses != 2 || releases != 1 || reads[len(reads)-1] != (reading{}) {
+		t.Errorf("expected the screen press, the physical press and only the final release: %v", reads)
+	}
+}
+
+func TestPublicConstructorInBuiltGame(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 45*time.Second)
+	defer cancel()
+	binary := filepath.Join(t.TempDir(), "hook-game")
+	if out, err := exec.CommandContext(ctx, "go", "build", "-o", binary, "./testdata/public").CombinedOutput(); err != nil {
+		t.Fatalf("build game: %v\n%s", err, out)
+	}
+	if out, err := exec.CommandContext(ctx, binary).CombinedOutput(); err != nil {
+		t.Fatalf("built game: %v\n%s", err, out)
+	}
 }
 
 func checkOneHold(t *testing.T, reads []reading) {

@@ -16,12 +16,6 @@ const Supported = true
 
 var backend = engineBackend{verify: verify, apply: apply}
 
-//go:linkname uiGet github.com/hajimehoshi/ebiten/v2/internal/ui.Get
-func uiGet() unsafe.Pointer
-
-//go:linkname uiInputTime github.com/hajimehoshi/ebiten/v2/internal/ui.(*UserInterface).InputTime
-func uiInputTime(ui unsafe.Pointer) inputTime
-
 //go:linkname inputstateGet github.com/hajimehoshi/ebiten/v2/internal/inputstate.Get
 func inputstateGet() unsafe.Pointer
 
@@ -43,10 +37,6 @@ type inputState struct {
 
 type touch struct {
 	ID, X, Y int
-}
-
-func stamp() inputTime {
-	return uiInputTime(uiGet())
 }
 
 // Public input reads take the same lock, so they must run outside write.

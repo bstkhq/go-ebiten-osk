@@ -60,6 +60,10 @@ input copy. Keep calling `h.Update()` each tick so that a keyboard you stop
 updating releases its keys. The input copy sees hooked keys and characters
 through Ebitengine, and `Keyboard.AppendEvents` is still available.
 
+A physically held key keeps its own Ebitengine state. A physical press that
+takes over an on-screen hold can report a new press and restart the duration.
+Use the input copy without the hook for a continuous hold across both sources.
+
 Importing the hook opts into linking its engine integration. With
 `-tags ebitenosk_nohook`, the package compiles without the internal symbols
 and `hook.New()` reports that the hook is disabled. Use this tag when building
