@@ -109,6 +109,15 @@ func (h hands) read(look func(*reader)) {
 	h.WithGame(func(game ebiten.Game) { look(game.(*reader)) })
 }
 
+// settle lets the game run until what the driver did last has reached it: the driver's
+// release of a button or a key is handed to the game in an update that may come after the
+// tick the driver waited for.
+func (h hands) settle() {
+	h.t.Helper()
+
+	h.Tick(2)
+}
+
 // middle is the middle of the key that shows face.
 func (h hands) middle(face string) image.Point {
 	h.t.Helper()
@@ -154,6 +163,7 @@ func TestAGameReadsClicksOnTheKeysWithThePackagesFunctions(t *testing.T) {
 
 	h.click("H")
 	h.click("I")
+	h.settle()
 
 	if got := h.text(); got != "HI" {
 		t.Errorf("clicking H and I typed %q", got)
@@ -381,6 +391,7 @@ func TestTheSameGameStillReadsThePhysicalKeyboard(t *testing.T) {
 	h.click("H")
 	h.Type("ey")
 	h.Tap(ebiten.KeyBackspace)
+	h.settle()
 
 	if got := h.text(); got != "He" {
 		t.Errorf("H on the screen, then e, y and backspace on the keyboard, left %q, want He", got)
@@ -421,6 +432,7 @@ func TestAGameThatDropsItsOnlyKeyboardSeesItsKeysGoUpOnce(t *testing.T) {
 
 	// The physical H afterwards is a press like any other.
 	h.Tap(ebiten.KeyH)
+	h.settle()
 
 	h.read(func(g *reader) {
 		want := []ebiten.Key{ebiten.KeyH, ebiten.KeyH}
