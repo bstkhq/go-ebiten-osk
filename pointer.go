@@ -1,7 +1,8 @@
 package osk
 
 import (
-	"slices"
+	"image"
+	"math"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
@@ -66,9 +67,10 @@ func (screen) AppendPointers(pointers []Pointer) []Pointer {
 
 	touches.watch()
 
-	for _, id := range touches.down {
-		x, y := ebiten.TouchPosition(id)
-		pointers = append(pointers, Pointer{ID: PointerID(id), X: x, Y: y, Landed: touches.landed(id)})
+	for _, touch := range touches.down {
+		pointers = append(pointers, Pointer{
+			ID: PointerID(touch.id), X: touch.at.X, Y: touch.at.Y, Landed: touches.landed(touch),
+		})
 	}
 
 	return pointers
@@ -87,10 +89,15 @@ type fingers struct {
 	at   int64
 	seen bool
 
-	// down are the touches down in that tick. before are those of the tick before it, known
-	// when that tick was watched too.
-	down, before []ebiten.TouchID
+	// before contains the preceding tick's contacts when it was watched, or none.
+	ids          []ebiten.TouchID
+	down, before []contact
 	known        bool
+}
+
+type contact struct {
+	id ebiten.TouchID
+	at image.Point
 }
 
 // watch takes in the touches of this tick, the first time it is asked in it.
@@ -101,16 +108,78 @@ func (f *fingers) watch() {
 	}
 
 	f.known = f.seen && now == f.at+1
-	f.before, f.down = f.down, ebiten.AppendTouchIDs(f.before[:0])
+	f.before, f.down = f.down, f.before[:0]
+	if !f.known {
+		f.before = f.before[:0]
+	}
+	f.ids = ebiten.AppendTouchIDs(f.ids[:0])
+	for _, id := range f.ids {
+		x, y := ebiten.TouchPosition(id)
+		f.down = append(f.down, contact{id: id, at: image.Pt(x, y)})
+	}
 	f.at, f.seen = now, true
 }
 
+const touchJump = 64
+
 // landed says whether the touch came down in this tick. Where the tick before was not
 // watched, it is what inpututil makes of the touch.
-func (f *fingers) landed(id ebiten.TouchID) bool {
-	if f.known {
-		return !slices.Contains(f.before, id)
+func (f *fingers) landed(touch contact) bool {
+	if !f.known {
+		return inpututil.TouchPressDuration(touch.id) == 1
+	}
+	for _, previous := range f.before {
+		if previous.id == touch.id {
+			return distance(previous.at, touch.at) > touchJump
+		}
 	}
 
-	return inpututil.TouchPressDuration(id) == 1
+	return true
+}
+
+func distance(a, b image.Point) float64 {
+	return math.Hypot(float64(a.X)-float64(b.X), float64(a.Y)-float64(b.Y))
+}
+
+const mouseEchoRadius = 12
+
+type mouseLanding struct {
+	at     image.Point
+	key    int
+	lifted bool
+}
+
+func nearTouch(at image.Point, contacts []contact) bool {
+	for _, touch := range contacts {
+		if distance(at, touch.at) <= mouseEchoRadius {
+			return true
+		}
+	}
+	return false
+}
+
+// deferMouse takes the mouse at its original landing, but gives a matching touch one more
+// tick to arrive before pressing. A matched mouse stays taken and never holds the key.
+func (k *Keyboard) deferMouse(pointer Pointer, l landing) landing {
+	at := image.Pt(pointer.X, pointer.Y)
+	if !nearTouch(at, touches.down) && !nearTouch(at, touches.before) {
+		k.mouse = mouseLanding{at: at, key: l.key, lifted: pointer.Lifted}
+		l.pending = true
+	}
+	l.key = noKey
+	return l
+}
+
+func (k *Keyboard) resolveMouse(listening bool) {
+	l := k.landed[Mouse]
+	if !l.pending || !listening || k.hidden {
+		return
+	}
+
+	l.pending = false
+	if !nearTouch(k.mouse.at, touches.down) {
+		l.key = k.mouse.key
+		l = k.pressLanding(l, k.mouse.lifted)
+	}
+	k.landed[Mouse] = l
 }

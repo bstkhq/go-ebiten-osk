@@ -32,9 +32,11 @@ type Keyboard struct {
 	positions []ebiten.Key
 	fingers   []int
 
-	// landed is the key each pointer that is down landed on, or noKey.
-	landed map[PointerID]int
+	landed map[PointerID]landing
 	down   []Pointer
+	mouse  mouseLanding
+
+	repeat eraseRepeat
 
 	// events is what the keyboard did in its last update, and changes what became of the
 	// physical positions in it.
@@ -44,6 +46,12 @@ type Keyboard struct {
 	// held counts the keys pressed at each physical position: two keys of a layer may stand
 	// for one position, which goes down with the first and up with the last.
 	held [ebiten.KeyMax + 1]int
+}
+
+type landing struct {
+	key     int
+	taken   bool
+	pending bool
 }
 
 // A change is what became of a physical position in one update of a keyboard: whether the
@@ -89,6 +97,7 @@ type Option func(*options)
 type options struct {
 	pointers Pointers
 	input    *Input
+	repeat   eraseRepeat
 }
 
 // WithPointers makes the keyboard read its pointers from somewhere other than Ebitengine's
@@ -111,7 +120,7 @@ func New(layout Layout, opts ...Option) (*Keyboard, error) {
 		return nil, err
 	}
 
-	var o options
+	o := options{repeat: eraseRepeat{delay: 30, interval: 6}}
 	for _, opt := range opts {
 		opt(&o)
 	}
@@ -124,7 +133,10 @@ func New(layout Layout, opts ...Option) (*Keyboard, error) {
 		o.input = defaultInput
 	}
 
-	k := &Keyboard{pointers: o.pointers, input: o.input, updated: never, landed: map[PointerID]int{}}
+	k := &Keyboard{
+		pointers: o.pointers, input: o.input, updated: never,
+		landed: make(map[PointerID]landing), repeat: o.repeat,
+	}
 
 	for _, row := range layout.Layers[0].Rows {
 		k.rows = append(k.rows, slices.Clone(row))
@@ -182,6 +194,14 @@ func (k *Keyboard) AppendEvents(events []Event) []Event {
 	return append(events, k.events...)
 }
 
+// PointerTaken reports whether id belongs to the keyboard in the current tick. The
+// keyboard takes a pointer that lands anywhere in its rectangle while shown, including
+// blank space, and keeps it through slides and through the update that sees a same-tick
+// tap. Call it after Update, before handling that pointer elsewhere in the game.
+func (k *Keyboard) PointerTaken(id PointerID) bool {
+	return !k.hidden && k.updated == k.input.tick() && k.landed[id].taken
+}
+
 // Update takes in the pointers of this tick. A pointer that lands on a key presses it, and
 // types its text, until that pointer lifts; where it moves in between changes nothing.
 //
@@ -203,6 +223,7 @@ func (k *Keyboard) Update() {
 	k.changes = k.changes[:0]
 	k.down = k.pointers.AppendPointers(k.down[:0])
 
+	k.resolveMouse(listening)
 	k.lift(listening)
 
 	if !listening {
@@ -212,6 +233,7 @@ func (k *Keyboard) Update() {
 	}
 
 	k.land(listening)
+	k.repeatErase()
 	k.input.feed(&k.held, k.changes, k.events)
 }
 
@@ -219,9 +241,9 @@ func (k *Keyboard) Update() {
 // again since the last update; and of all of them while the keyboard is hidden or was not
 // listening.
 func (k *Keyboard) lift(listening bool) {
-	for id, key := range k.landed {
+	for id, landed := range k.landed {
 		if !listening || k.hidden || !stayedDown(k.down, id) {
-			k.release(key)
+			k.release(landed.key)
 			delete(k.landed, id)
 		}
 	}
@@ -248,25 +270,33 @@ func (k *Keyboard) land(listening bool) {
 			continue
 		}
 
-		key := noKey
-		if !k.hidden && (listening || pointer.Landed) {
-			key = k.keyAt(pointer.X, pointer.Y)
-		}
-
-		k.press(key)
-
-		if pointer.Lifted {
-			k.release(key)
-			key = noKey
-		}
-
-		k.landed[pointer.ID] = key
+		k.landed[pointer.ID] = k.take(pointer, listening)
 	}
 }
 
-func (k *Keyboard) keyAt(x, y int) int {
-	at := image.Pt(x, y)
+func (k *Keyboard) take(pointer Pointer, listening bool) landing {
+	at := image.Pt(pointer.X, pointer.Y)
+	if k.hidden || (!listening && !pointer.Landed) || !at.In(k.rect) {
+		return landing{key: noKey}
+	}
 
+	l := landing{key: k.keyAt(at), taken: true}
+	if _, stock := k.pointers.(*screen); stock && pointer.ID == Mouse && l.key != noKey {
+		return k.deferMouse(pointer, l)
+	}
+	return k.pressLanding(l, pointer.Lifted)
+}
+
+func (k *Keyboard) pressLanding(l landing, lifted bool) landing {
+	k.press(l.key)
+	if lifted {
+		k.release(l.key)
+		l.key = noKey
+	}
+	return l
+}
+
+func (k *Keyboard) keyAt(at image.Point) int {
 	for i, key := range k.keys {
 		if at.In(key.Rect) {
 			return i
@@ -288,11 +318,13 @@ func (k *Keyboard) press(key int) {
 	}
 
 	k.keys[key].State = StatePressed
+	if k.keys[key].Do.kind == erases {
+		k.repeat.press(k.updated)
+	}
 
 	if position := k.positions[key]; position != noPosition {
 		if k.held[position] == 0 {
-			k.changed(position).pressed = true
-			k.events = append(k.events, Event{Kind: KeyDown, Key: position})
+			k.positionDown(position)
 		}
 
 		k.held[position]++
@@ -315,15 +347,27 @@ func (k *Keyboard) release(key int) {
 	}
 
 	k.keys[key].State = StateIdle
+	if k.keys[key].Do.kind == erases {
+		k.repeat.held--
+	}
 
 	if position := k.positions[key]; position != noPosition {
 		if k.held[position] == 1 {
-			k.changed(position)
-			k.events = append(k.events, Event{Kind: KeyUp, Key: position})
+			k.positionUp(position)
 		}
 
 		k.held[position]--
 	}
+}
+
+func (k *Keyboard) positionDown(position ebiten.Key) {
+	k.changed(position).pressed = true
+	k.events = append(k.events, Event{Kind: KeyDown, Key: position})
+}
+
+func (k *Keyboard) positionUp(position ebiten.Key) {
+	k.changed(position)
+	k.events = append(k.events, Event{Kind: KeyUp, Key: position})
 }
 
 // changed is the change of the position in this update, begun now if it is its first: asked

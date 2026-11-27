@@ -83,13 +83,14 @@ func compactBoard(t *testing.T) board {
 	return newBoard(t, layout)
 }
 
-func newBoard(t *testing.T, layout osk.Layout) board {
+func newBoard(t *testing.T, layout osk.Layout, opts ...osk.Option) board {
 	t.Helper()
 
 	b := board{fingers: &fingers{}}
 	b.input, b.next = osk.SteppedInput()
 
-	keyboard, err := osk.New(layout, osk.WithPointers(b.fingers), osk.WithInput(b.input))
+	opts = append(opts, osk.WithPointers(b.fingers), osk.WithInput(b.input))
+	keyboard, err := osk.New(layout, opts...)
 	if err != nil {
 		t.Fatalf("a keyboard of that layout: %v", err)
 	}

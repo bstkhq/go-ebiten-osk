@@ -44,6 +44,36 @@ go run github.com/bstkhq/go-ebiten-osk/examples/typing@latest
 
 The words used here and in the code are in the [glossary](GLOSSARY.md).
 
+## Touch and erase
+
+Update the keyboard before handling the game's own pointers. Check
+`keyboard.PointerTaken(osk.PointerID(id))` for an Ebitengine touch or
+`keyboard.PointerTaken(osk.Mouse)` for the left mouse button. A pointer that
+lands inside the shown keyboard belongs to it until it lifts, even if it lands
+in blank space or slides outside. Hiding the keyboard releases its keys and
+clears ownership. A pointer that stays down while the keyboard is shown again
+needs to lift and land to press a key.
+
+An erase press sends Backspace and repeats after 30 game ticks, then every
+6 ticks. At 60 ticks per second these are 500 ms and 100 ms. Set the two counts
+with `osk.WithEraseRepeat(delay, interval)`, or pass zero for either to disable
+repeat. Counting ticks lets a game that handles `IsKeyJustPressed` erase once
+per repeat with deterministic timing at its chosen tick rate.
+
+The stock pointer source sees one snapshot per tick. When a touch ID moves
+more than 64 logical pixels between consecutive samples, the keyboard treats
+it as a lift and a new landing. A close reuse of the same ID can look like a
+slide, and a fast enough slide can look like a new landing. A custom source
+that knows the edges can report them with `Pointer.Landed`.
+
+The stock source also handles touchscreens that echo a touch as a mouse press.
+A mouse landing on a key waits one tick for a touch within 12 logical pixels.
+Touches in the preceding, same or following tick can match. The touch chooses
+the key, and a matching mouse press stays suppressed until the button lifts.
+A genuine mouse press in that range and time window can look like an echo.
+Stock mouse landings are taken immediately for `PointerTaken`. Custom pointer
+sources supply their own edges and handle any duplicate reports themselves.
+
 ## State
 
 Early. What works today:
@@ -52,7 +82,7 @@ Early. What works today:
 - the input copy, alongside the physical keyboard;
 - the stock painter with a dark theme.
 
-Planned, in the [issues](https://github.com/bstkhq/go-ebiten-osk/issues): layers and the es-ES boards, the full form for names and emails, erase that repeats, a light theme and the full theme model, more locales, and an optional hook that makes Ebitengine's own functions report the on-screen keys, for code that cannot be changed.
+Planned, in the [issues](https://github.com/bstkhq/go-ebiten-osk/issues): layers and the es-ES boards, the full form for names and emails, a light theme and the full theme model, more locales, and an optional hook that makes Ebitengine's own functions report the on-screen keys, for code that cannot be changed.
 
 Built and tested against Ebitengine v2.9.9. The API will change until the first tagged version.
 

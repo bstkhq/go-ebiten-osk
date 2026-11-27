@@ -38,6 +38,9 @@ type reader struct {
 
 	// hTaps counts the ticks in which H went down and up at once, for no time at all.
 	hTaps int
+	taken []osk.PointerID
+
+	afterUpdate func()
 }
 
 func newReader() ebiten.Game {
@@ -59,6 +62,7 @@ func newReader() ebiten.Game {
 func (g *reader) Update() error {
 	if g.keyboard != nil {
 		g.keyboard.Update()
+		g.recordTaken()
 	}
 
 	if osk.IsKeyJustPressed(ebiten.KeyBackspace) && len(g.text) > 0 {
@@ -81,7 +85,25 @@ func (g *reader) Update() error {
 		g.hTaps++
 	}
 
+	if after := g.afterUpdate; after != nil {
+		g.afterUpdate = nil
+		after()
+	}
+
 	return nil
+}
+
+func (g *reader) recordTaken() {
+	g.taken = g.taken[:0]
+	for _, touch := range ebiten.AppendTouchIDs(nil) {
+		id := osk.PointerID(touch)
+		if g.keyboard.PointerTaken(id) {
+			g.taken = append(g.taken, id)
+		}
+	}
+	if g.keyboard.PointerTaken(osk.Mouse) {
+		g.taken = append(g.taken, osk.Mouse)
+	}
 }
 
 func (g *reader) Draw(*ebiten.Image) {}
@@ -496,6 +518,142 @@ func TestAGameReadsTouchesOnTheKeys(t *testing.T) {
 			t.Errorf("lifting both fingers released %v, want O and K", g.released)
 		}
 	})
+}
+
+func TestAReusedTouchIDPressesItsNewKey(t *testing.T) {
+	h := sit(t)
+	hKey, qKey := h.middle("H"), h.middle("Q")
+	fingers := h.Runtime().Injector()
+
+	fingers.SetTouches([]ebitenmcp.Touch{{ID: 7, X: hKey.X, Y: hKey.Y}})
+	h.Tick(3)
+	// The same slot reports the new contact, with no intervening empty sample.
+	fingers.SetTouches([]ebitenmcp.Touch{{ID: 7, X: qKey.X, Y: qKey.Y}})
+	h.Tick(3)
+
+	h.read(func(g *reader) {
+		if string(g.text) != "HQ" || g.hDown || g.hUps != 1 || !slices.Equal(g.down, []ebiten.Key{ebiten.KeyQ}) {
+			t.Errorf("reused ID: typed %q, down %v, H releases %d", string(g.text), g.down, g.hUps)
+		}
+	})
+	fingers.SetTouches(nil)
+	h.settle()
+}
+
+func TestAMouseEchoAcrossAKeyEdgeTypesOnlyTheTouch(t *testing.T) {
+	for _, order := range []string{"together", "mouse first", "touch first"} {
+		t.Run(order, func(t *testing.T) {
+			h := sit(t)
+			at := h.middle("H")
+			// H starts at x=352. The mouse report is on G, three pixels from the touch.
+			inject := h.Runtime().Injector()
+			h.Move(350, float64(at.Y))
+			mouse := func() { inject.MouseDown(ebiten.MouseButtonLeft) }
+			touch := func() { inject.SetTouches([]ebitenmcp.Touch{{ID: 7, X: 353, Y: at.Y}}) }
+			var game *reader
+			h.read(func(g *reader) { game = g })
+			h.inOneTick(func() {
+				switch order {
+				case "mouse first":
+					mouse()
+					game.afterUpdate = touch
+				case "touch first":
+					touch()
+					game.afterUpdate = func() {
+						inject.SetTouches(nil)
+						mouse()
+					}
+				default:
+					mouse()
+					touch()
+				}
+			})
+			h.Tick(3)
+			inject.SetTouches(nil)
+			h.settle()
+
+			h.read(func(g *reader) {
+				if string(g.text) != "H" || len(g.down) != 0 || g.hUps != 1 || !slices.Contains(g.taken, osk.Mouse) {
+					t.Errorf("with only the mouse echo left: typed %q, down %v, H releases %d, taken %v",
+						string(g.text), g.down, g.hUps, g.taken)
+				}
+			})
+			inject.MouseUp(ebiten.MouseButtonLeft)
+			h.settle()
+		})
+	}
+}
+
+func TestAGameReadsTwoKeysAndTakesAFingerInTheMargin(t *testing.T) {
+	h := sit(t)
+	hKey, iKey := h.middle("H"), h.middle("I")
+	fingers := h.Runtime().Injector()
+	contacts := []ebitenmcp.Touch{
+		{ID: 1, X: hKey.X, Y: hKey.Y}, {ID: 2, X: hKey.X, Y: hKey.Y},
+		{ID: 3, X: iKey.X, Y: iKey.Y}, {ID: 4, X: 1, Y: hKey.Y},
+	}
+	fingers.SetTouches(contacts)
+	h.Tick(3)
+	h.read(func(g *reader) {
+		if !slices.Equal(g.down, []ebiten.Key{ebiten.KeyH, ebiten.KeyI}) || !slices.Contains(g.taken, 4) {
+			t.Errorf("with two keys and the margin touched: down %v, taken %v", g.down, g.taken)
+		}
+	})
+
+	// Slide finger 2 from H to G and lift finger 1. H stays held by finger 2.
+	contacts[1].X -= 34
+	fingers.SetTouches(contacts[1:])
+	h.Tick(3)
+	h.read(func(g *reader) {
+		if !g.hDown || g.hUps != 0 || slices.Contains(g.down, ebiten.KeyG) {
+			t.Errorf("after one finger slides and one lifts: down %v, H releases %d", g.down, g.hUps)
+		}
+	})
+
+	fingers.SetTouches(contacts[2:])
+	h.Tick(3)
+	h.read(func(g *reader) {
+		if !slices.Equal(g.down, []ebiten.Key{ebiten.KeyI}) || g.hUps != 1 {
+			t.Errorf("after the last finger on H lifts: down %v, H releases %d", g.down, g.hUps)
+		}
+		g.keyboard.Hide()
+	})
+	h.Tick(3)
+	h.read(func(g *reader) {
+		if !slices.Contains(g.released, ebiten.KeyI) || len(g.taken) != 0 || len(g.down) != 0 {
+			t.Errorf("after hiding: down %v, releases %v, taken %v", g.down, g.released, g.taken)
+		}
+		if len(g.text) != 2 || !slices.Contains(g.text, 'H') || !slices.Contains(g.text, 'I') {
+			t.Errorf("typing with several fingers produced %q, want H and I once each", string(g.text))
+		}
+	})
+	fingers.SetTouches(nil)
+	h.settle()
+}
+
+func TestAGameErasesAgainWhileTheTouchStaysDown(t *testing.T) {
+	h := sit(t)
+	for range 4 {
+		h.click("H")
+	}
+	h.settle()
+
+	at := h.middle("Delete")
+	fingers := h.Runtime().Injector()
+	fingers.SetTouches([]ebitenmcp.Touch{{ID: 7, X: at.X, Y: at.Y}})
+	h.Tick(10)
+	if got := h.text(); got != "HHH" {
+		t.Errorf("before the repeat delay the text is %q, want HHH", got)
+	}
+	h.Tick(28)
+	if got := h.text(); got != "H" {
+		t.Errorf("after two repeats the text is %q, want H", got)
+	}
+	fingers.SetTouches(nil)
+	h.Tick(10)
+	if got := h.text(); got != "H" {
+		t.Errorf("after releasing erase the text is %q, want H", got)
+	}
 }
 
 func TestTheSameGameStillReadsThePhysicalKeyboard(t *testing.T) {
