@@ -1,0 +1,64 @@
+name: Checks
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.25.x'
+
+      - name: Install Ebitengine build and display dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc libgl1-mesa-dev libxrandr-dev libxcursor-dev \
+            libxinerama-dev libxi-dev libxxf86vm-dev mesa-utils xvfb
+
+      - name: Build
+        run: go build ./...
+      - name: Vet
+        run: go vet ./...
+
+      # The hook's upstream declaration checks live in a package without Ebitengine.
+      - name: Test without a display
+        id: hook-checksum
+        if: ${{ hashFiles('hook/internal/upstream/*_test.go') != '' }}
+        run: env -u DISPLAY -u WAYLAND_DISPLAY go test -count=1 ./hook/internal/upstream
+
+      - name: Test under a display
+        run: go run github.com/bstkhq/go-ebiten-mcp/cmd/ebitenmcp run --x local --addr "" -- go test -count=1 ./...
+
+      - name: Test under a display with the hook compiled out
+        id: hook-disabled
+        if: ${{ hashFiles('hook/nohook.go') != '' }}
+        run: go run github.com/bstkhq/go-ebiten-mcp/cmd/ebitenmcp run --x local --addr "" -- go test -count=1 -tags ebitenosk_nohook ./...
+
+      - name: Report which optional hook checks ran
+        run: |
+          printf 'Display-less check (requires hook/internal/upstream tests) %s\n' '${{ steps.hook-checksum.outcome }}'
+          printf 'Hook-disabled suite (requires hook/nohook.go) %s\n' '${{ steps.hook-disabled.outcome }}'
+
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
+        with:
+          version: v2.15.0
+          install-only: true
+      - name: Report lint findings across the module
+        run: golangci-lint run --issues-exit-code=0
+      - name: Check lint on changed lines
+        if: github.event_name == 'pull_request' || github.ref != 'refs/heads/main'
+        run: golangci-lint run --new-from-merge-base=origin/main
