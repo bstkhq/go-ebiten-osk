@@ -155,15 +155,7 @@ func TestALabelTooWideForItsKeyIsDrawnSmallerNotCut(t *testing.T) {
 		{Do: osk.Type("x"), Weight: 9},
 	}}}}}
 
-	d.WithGame(func(game ebiten.Game) {
-		keyboard, err := osk.New(wide)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		keyboard.SetRect(image.Rect(0, boardTop, screenW, screenH))
-		game.(*board).keyboard = keyboard
-	})
+	setLayout(t, d, wide)
 	d.Tick(1)
 
 	// The first key is 64 pixels wide. Its label is the only light thing on it, and small
@@ -203,15 +195,7 @@ func TestALabelTheFontLacksIsDrawnWithoutStoppingTheGame(t *testing.T) {
 		{Do: osk.Type("x")},
 	}}}}}
 
-	d.WithGame(func(game ebiten.Game) {
-		keyboard, err := osk.New(foreign)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		keyboard.SetRect(image.Rect(0, boardTop, screenW, screenH))
-		game.(*board).keyboard = keyboard
-	})
+	setLayout(t, d, foreign)
 
 	// The driver fails the test if the game panics while it draws these frames.
 	d.Tick(3)
@@ -222,6 +206,17 @@ func TestALabelTheFontLacksIsDrawnWithoutStoppingTheGame(t *testing.T) {
 
 	if got := colourAt(d.Screenshot(), image.Pt(screenW-20, boardTop+120)); got != paint.Dark().Key {
 		t.Errorf("the key beside it has a face of %v, want the theme's %v", got, paint.Dark().Key)
+	}
+}
+
+func setLayout(t *testing.T, d *ebitenmcp.Driver, layout osk.Layout) {
+	t.Helper()
+	var err error
+	d.WithGame(func(game ebiten.Game) {
+		err = game.(*board).keyboard.SetLayout(layout)
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 

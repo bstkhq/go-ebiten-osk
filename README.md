@@ -35,6 +35,21 @@ Try it:
 go run github.com/bstkhq/go-ebiten-osk/examples/typing@latest
 ```
 
+Press F1 for compact en-US, F2 for compact es-ES, and F3 for a PIN pad built from
+the exported layout blocks.
+
+## Layouts
+
+`osk.Stock` looks up a layout by locale and form. Compact `osk.EnUS` and `osk.EsES`
+both have uppercase letters, a `123` layer with digits and punctuation, and an
+`ABC` switch back to letters. Spanish also has an `ÁÉÍ` layer.
+
+Call `Keyboard.SetLayout` to change locale or use a custom layout. Its first
+layer takes effect immediately, and held keys are released in the next
+`Keyboard.Update`. Call it before `Update` to read those releases in the same
+game tick. Custom layouts use a `Layer.Name` and a key with
+`osk.SwitchLayer(name)` to link layers.
+
 ## How it is made
 
 - **The keyboard draws nothing.** `osk.Keyboard` holds a layout and a rectangle, and turns the fingers and the mouse on its keys into key presses and typed text. Package `paint` draws it from a theme; a game with a look of its own draws it itself from `Keyboard.AppendKeys`.
@@ -48,11 +63,11 @@ The words used here and in the code are in the [glossary](GLOSSARY.md).
 
 Early. What works today:
 
-- the compact en-US board (letters, space, erase), typed with fingers or the mouse;
+- compact en-US and es-ES boards, typed with fingers or the mouse;
 - the input copy, alongside the physical keyboard;
 - the stock painter with a dark theme.
 
-Planned, in the [issues](https://github.com/bstkhq/go-ebiten-osk/issues): layers and the es-ES boards, the full form for names and emails, erase that repeats, a light theme and the full theme model, more locales, and an optional hook that makes Ebitengine's own functions report the on-screen keys, for code that cannot be changed.
+Planned, in the [issues](https://github.com/bstkhq/go-ebiten-osk/issues): the full form for names and emails, erase that repeats, a light theme and the full theme model, more locales, and an optional hook that makes Ebitengine's own functions report the on-screen keys, for code that cannot be changed.
 
 Built and tested against Ebitengine v2.9.9. The API will change until the first tagged version.
 

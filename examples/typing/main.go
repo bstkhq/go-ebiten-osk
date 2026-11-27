@@ -12,6 +12,7 @@ import (
 	"log"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/tinne26/etxt"
 
 	osk "github.com/bstkhq/go-ebiten-osk"
@@ -55,7 +56,6 @@ func newGame() (*game, error) {
 
 	text := etxt.NewRenderer()
 	text.SetFont(theme.Font)
-	text.SetSize(48)
 	text.SetColor(ink)
 	text.SetAlign(etxt.Center)
 
@@ -69,6 +69,9 @@ func newGame() (*game, error) {
 // Update reads the keyboard exactly as a game reads a physical one, with osk in the place of
 // ebiten and inpututil.
 func (g *game) Update() error {
+	if err := g.chooseLayout(); err != nil {
+		return err
+	}
 	g.keyboard.Update()
 
 	if osk.IsKeyJustPressed(ebiten.KeyBackspace) {
@@ -80,9 +83,48 @@ func (g *game) Update() error {
 	return nil
 }
 
+func (g *game) chooseLayout() error {
+	switch {
+	case inpututil.IsKeyJustPressed(ebiten.KeyF1):
+		return g.showCompact(osk.EnUS)
+	case inpututil.IsKeyJustPressed(ebiten.KeyF2):
+		return g.showCompact(osk.EsES)
+	case inpututil.IsKeyJustPressed(ebiten.KeyF3):
+		return g.keyboard.SetLayout(pinPad())
+	default:
+		return nil
+	}
+}
+
+func (g *game) showCompact(locale osk.Locale) error {
+	layout, err := osk.Stock(locale, osk.Compact)
+	if err != nil {
+		return err
+	}
+	return g.keyboard.SetLayout(layout)
+}
+
+// pinPad builds a layout from the same blocks as the stock boards.
+func pinPad() osk.Layout {
+	positions := make(osk.Positions, 10)
+	rows := make([][]osk.Key, 4)
+	for i, digits := range []string{"123", "456", "789", "0"} {
+		for _, digit := range digits {
+			positions[digit] = ebiten.KeyDigit0 + ebiten.Key(digit-'0')
+			rows[i] = append(rows[i], osk.Key{Do: osk.Type(string(digit))})
+		}
+	}
+	rows[3] = append(rows[3], osk.Key{Do: osk.Erase(), Label: "Delete", Weight: 2})
+
+	return osk.Layout{Positions: positions, Layers: []osk.Layer{{Rows: rows}}}
+}
+
 func (g *game) Draw(screen *ebiten.Image) {
 	screen.Fill(background)
+	g.text.SetSize(48)
 	g.text.Draw(screen, string(g.line)+"_", width/2, boardTop/2)
+	g.text.SetSize(20)
+	g.text.Draw(screen, "F1  en-US     F2  es-ES     F3  PIN pad", width/2, boardTop-28)
 	g.painter.Draw(screen, g.keyboard)
 }
 
