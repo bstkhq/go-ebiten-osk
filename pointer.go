@@ -1,12 +1,22 @@
 package osk
 
-import "github.com/hajimehoshi/ebiten/v2"
+import (
+	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
+)
 
 // A Pointer is one finger on the screen, or the mouse with its button down, and where it is,
 // in the pixels the keyboard's rectangle is given in.
 type Pointer struct {
 	ID   PointerID
 	X, Y int
+
+	// Landed says that the pointer came down in this tick, even if one of the same
+	// identifier was down in the tick before: it lifted and landed again between the two
+	// updates, as the second of two quick clicks does. A keyboard always takes for landed a
+	// pointer it did not see in the tick before, so a source that cannot tell leaves it
+	// false.
+	Landed bool
 }
 
 // A PointerID tells one pointer from another for as long as it stays down.
@@ -34,7 +44,8 @@ type screen struct {
 func (s *screen) AppendPointers(pointers []Pointer) []Pointer {
 	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
 		x, y := ebiten.CursorPosition()
-		pointers = append(pointers, Pointer{ID: Mouse, X: x, Y: y})
+		landed := inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
+		pointers = append(pointers, Pointer{ID: Mouse, X: x, Y: y, Landed: landed})
 	}
 
 	s.touches = ebiten.AppendTouchIDs(s.touches[:0])

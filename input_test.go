@@ -51,10 +51,11 @@ func (d *desk) release(key ebiten.Key) {
 	d.released[key] = true
 }
 
-// finger is one pointer a test puts on the screen and takes off.
+// finger is one pointer a test puts on the screen and takes off. again says that it lifted
+// and landed again since the last update.
 type finger struct {
-	down bool
-	x, y int
+	down, again bool
+	x, y        int
 }
 
 func (f *finger) AppendPointers(pointers []Pointer) []Pointer {
@@ -62,7 +63,10 @@ func (f *finger) AppendPointers(pointers []Pointer) []Pointer {
 		return pointers
 	}
 
-	return append(pointers, Pointer{ID: 1, X: f.x, Y: f.y})
+	landed := f.again
+	f.again = false
+
+	return append(pointers, Pointer{ID: 1, X: f.x, Y: f.y, Landed: landed})
 }
 
 // both is a physical keyboard and an on-screen Q key under one finger, feeding one input
@@ -635,5 +639,70 @@ func TestAModifierNamedForEitherSideIsPressedWithOneOfItsKeysOnTheScreen(t *test
 	if !input.IsKeyPressed(ebiten.KeyControlLeft) || !input.IsKeyPressed(ebiten.KeyControl) || input.IsKeyPressed(ebiten.KeyControlRight) {
 		t.Errorf("a key that names control for either side: left control pressed %t, control pressed %t, right control pressed %t, want the left one and the name",
 			input.IsKeyPressed(ebiten.KeyControlLeft), input.IsKeyPressed(ebiten.KeyControl), input.IsKeyPressed(ebiten.KeyControlRight))
+	}
+}
+
+func TestAKeyPressedAgainOnTheScreenUnderThePhysicalOneStaysOneHold(t *testing.T) {
+	b := newBoth(t)
+
+	b.physical.press(ebiten.KeyQ, 'q')
+	b.touch.down = true
+	b.keyboard.Update()
+
+	b.tick()
+	b.keyboard.Update()
+
+	// The finger lifts and lands again between two updates while the physical key holds:
+	// to a game the key was never up, though the letter is typed again.
+	b.tick()
+	b.touch.again = true
+	b.keyboard.Update()
+
+	if got, want := b.q(), (q{pressed: true, duration: 3}); got != want {
+		t.Errorf("a key pressed again on the screen under the physical one: the input says %+v, want %+v", got, want)
+	}
+
+	if got := string(b.input.AppendInputChars(nil)); got != "q" {
+		t.Errorf("the second landing typed %q, want its q", got)
+	}
+}
+
+func TestAKeyPressedAgainOnOneKeyboardWhileAnotherHoldsItStaysOneHold(t *testing.T) {
+	b := newBoth(t)
+
+	touch := &finger{down: true, x: 50, y: 50}
+
+	other, err := New(Layout{
+		Positions: Positions{'q': ebiten.KeyQ},
+		Layers:    []Layer{{Rows: [][]Key{{{Do: Type("q")}}}}},
+	}, WithPointers(touch), WithInput(b.input))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	other.SetRect(image.Rect(0, 0, 100, 100))
+
+	// Both keyboards hold Q. Whichever is updated last, one of them pressing again between
+	// two updates leaves the key down: the other holds it.
+	b.touch.down = true
+	b.keyboard.Update()
+	other.Update()
+
+	b.tick()
+	b.touch.again = true
+	b.keyboard.Update()
+	other.Update()
+
+	if got, want := b.q(), (q{pressed: true, duration: 2}); got != want {
+		t.Errorf("the keyboard updated first presses again: the input says %+v, want %+v", got, want)
+	}
+
+	b.tick()
+	touch.again = true
+	b.keyboard.Update()
+	other.Update()
+
+	if got, want := b.q(), (q{pressed: true, duration: 3}); got != want {
+		t.Errorf("the keyboard updated last presses again: the input says %+v, want %+v", got, want)
 	}
 }

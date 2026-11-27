@@ -55,7 +55,8 @@ var defaultInput = NewInput()
 
 // physical is the hardware keyboard, as Ebitengine and inpututil tell of it. A key that goes
 // down and up between two ticks is pressed, just pressed and just released in the one tick,
-// with a duration of zero.
+// with a duration of zero. One that goes up and down again is the same, with a duration of
+// one.
 type physical interface {
 	IsKeyPressed(key ebiten.Key) bool
 	IsKeyJustPressed(key ebiten.Key) bool
@@ -75,19 +76,50 @@ func (hardware) AppendInputChars(runes []rune) []rune  { return ebiten.AppendInp
 // A position is what an input knows of one physical position. It belongs to the input, not to
 // a keyboard: a key held by one keyboard and then by another, physical or on the screen, is
 // one key held.
+//
+// The physical keyboard and the on-screen ones are two holders of the key, each with its own
+// presses and releases. To a game the key goes down when a press of one comes while the other
+// was not holding it, and up when a release of one leaves the other not holding it.
 type position struct {
 	// since and last are the first and the last tick of the hold the key is in, or was last
 	// in: the latest run of ticks in which it was down without a break, whoever held it.
 	since, last int64
 	// physical is the tick in which the physical press last taken into that hold began.
 	physical int64
+
 	// screenSince and screenLast are the first and the last tick of the latest unbroken run
-	// of ticks in which an on-screen keyboard held the key.
+	// of ticks in which an on-screen keyboard held the key, and screenBy the keyboard that
+	// last told of holding it.
 	screenSince, screenLast int64
+	screenBy                *Keyboard
+	// screenAgain is the last tick in which that keyboard let go of the key and pressed it
+	// again between two updates, with no other on the screen holding it: a release and a
+	// press that leave the run unbroken.
+	screenAgain int64
 }
 
 // nothing is a position nothing ever held.
-var nothing = position{since: never, last: never, physical: never, screenSince: never, screenLast: never}
+var nothing = position{since: never, last: never, physical: never, screenSince: never, screenLast: never, screenAgain: never}
+
+// screenDown says whether an on-screen keyboard holds the key in the tick now, and
+// screenWasDown whether one held it when the tick before ended.
+func (p *position) screenDown(now int64) bool {
+	return p.screenLast == now
+}
+
+func (p *position) screenWasDown(now int64) bool {
+	return p.screenLast == now-1 || p.screenLast == now && p.screenSince < now
+}
+
+// screenPressed says whether the key went down on the screen in the tick now, and
+// screenReleased whether it went up there.
+func (p *position) screenPressed(now int64) bool {
+	return p.screenAgain == now || p.screenDown(now) && !p.screenWasDown(now)
+}
+
+func (p *position) screenReleased(now int64) bool {
+	return p.screenAgain == now || p.screenWasDown(now) && !p.screenDown(now)
+}
 
 // physicalDown notes that the physical key is down in the tick now, in a press that began in
 // the tick from. Two physical presses are two holds, as Ebitengine tells them, unless an
@@ -106,59 +138,65 @@ func (p *position) physicalDown(now, from int64) {
 	p.last = max(p.last, now)
 }
 
-// onScreen notes that an on-screen keyboard holds the key in the tick now. It goes on with the
-// hold the key was in when the tick before ended, whoever held it then.
-func (p *position) onScreen(now int64) {
-	if p.screenLast < now-1 {
-		p.screenSince = now
-	}
-
-	p.screenLast = now
-
-	if p.last < now-1 {
-		p.since = now
-	}
-
-	p.last = max(p.last, now)
-}
-
-// screenDown says whether an on-screen keyboard holds the key in the tick now, and
-// screenWasDown whether one held it in the tick before.
-func (p *position) screenDown(now int64) bool {
-	return p.screenLast == now
-}
-
-func (p *position) screenWasDown(now int64) bool {
-	return p.screenLast == now-1 || p.screenLast == now && p.screenSince < now
-}
-
-// feed takes in what an on-screen keyboard holds and typed in its update of this tick.
-func (in *Input) feed(held *[ebiten.KeyMax + 1]int, typed []rune) {
+// feed takes in an on-screen keyboard's update of this tick: the positions it holds, and what
+// it did, from which come the presses of positions and the typed text.
+func (in *Input) feed(keyboard *Keyboard, held *[ebiten.KeyMax + 1]int, events []Event) {
 	now := in.tick()
 	in.observe(now)
-
-	for key, fingers := range held {
-		if fingers == 0 {
-			continue
-		}
-
-		position := &in.positions[key]
-
-		// A physical key that was down when the tick before ended, and that nothing told
-		// the input of in that tick, was down all the same: the hold goes on from there.
-		if position.last < now-1 && in.physicalWasDown(ebiten.Key(key)) {
-			position.last = now - 1
-			position.since = now - 1
-		}
-
-		position.onScreen(now)
-	}
 
 	if in.typedAt != now {
 		in.typed, in.typedAt = in.typed[:0], now
 	}
 
-	in.typed = append(in.typed, typed...)
+	for _, event := range events {
+		switch event.Kind {
+		case KeyDown:
+			in.positions[event.Key].pressedAgain(keyboard, now)
+		case Text:
+			in.typed = append(in.typed, []rune(event.Text)...)
+		}
+	}
+
+	for key, fingers := range held {
+		if fingers > 0 {
+			in.hold(ebiten.Key(key), keyboard, now)
+		}
+	}
+}
+
+// pressedAgain notes a press of the position by a keyboard that already held it when the tick
+// before ended, with no other telling of it since: the keyboard let go and pressed again
+// between its two updates, as the second of two quick clicks on a key does.
+func (p *position) pressedAgain(keyboard *Keyboard, now int64) {
+	if p.screenBy == keyboard && p.screenLast == now-1 {
+		p.screenAgain = now
+	}
+}
+
+// hold notes that the keyboard holds the position in this tick. A press on the screen begins a
+// new hold unless the physical key was down when the tick before ended: then the hold passes
+// to the screen, and goes on.
+func (in *Input) hold(key ebiten.Key, keyboard *Keyboard, now int64) {
+	p := &in.positions[key]
+	physicalWasDown := in.physicalWasDown(key)
+
+	// A physical key that was down when the tick before ended, and that nothing told the
+	// input of in that tick, was down all the same: the hold is as old as that, at least.
+	if physicalWasDown && p.last < now-1 {
+		p.since, p.last = now-1, now-1
+	}
+
+	if p.screenLast < now-1 {
+		p.screenSince = now
+	}
+
+	p.screenLast, p.screenBy = now, keyboard
+
+	if p.screenPressed(now) && !physicalWasDown {
+		p.since = now
+	}
+
+	p.last = now
 }
 
 // observe takes the physical keyboard's holds of this tick into the positions, once a tick,
@@ -181,15 +219,15 @@ func (in *Input) observe(now int64) {
 
 // at is the position of the key in this tick, and the tick. A key Ebitengine does not have is
 // a position nothing ever held.
-func (in *Input) at(key ebiten.Key) (position, int64) {
+func (in *Input) at(key ebiten.Key) (*position, int64) {
 	now := in.tick()
 	in.observe(now)
 
 	if key < 0 || key > ebiten.KeyMax {
-		return nothing, now
+		return &nothing, now
 	}
 
-	return in.positions[key], now
+	return &in.positions[key], now
 }
 
 // sides are the two keys behind each of the names Ebitengine has for a modifier on either
@@ -234,11 +272,8 @@ func (in *Input) AppendInputChars(runes []rune) []rune {
 func (in *Input) IsKeyJustPressed(key ebiten.Key) bool {
 	position, now := in.at(key)
 
-	if in.physical.IsKeyJustPressed(key) {
-		return !position.screenWasDown(now)
-	}
-
-	return position.screenDown(now) && !position.screenWasDown(now) && !in.physicalWasDown(key)
+	return in.physical.IsKeyJustPressed(key) && !position.screenWasDown(now) ||
+		position.screenPressed(now) && !in.physicalWasDown(key)
 }
 
 // IsKeyJustReleased says whether the key went up in this tick, as
@@ -247,11 +282,8 @@ func (in *Input) IsKeyJustPressed(key ebiten.Key) bool {
 func (in *Input) IsKeyJustReleased(key ebiten.Key) bool {
 	position, now := in.at(key)
 
-	if in.physical.IsKeyJustReleased(key) {
-		return !position.screenDown(now)
-	}
-
-	return position.screenWasDown(now) && !position.screenDown(now) && in.physical.KeyPressDuration(key) == 0
+	return in.physical.IsKeyJustReleased(key) && !position.screenDown(now) ||
+		position.screenReleased(now) && in.physical.KeyPressDuration(key) == 0
 }
 
 // KeyPressDuration is how many ticks the key has been pressed for, as

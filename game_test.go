@@ -1,9 +1,11 @@
 package osk_test
 
 import (
+	"context"
 	"image"
 	"slices"
 	"testing"
+	"time"
 
 	ebitenmcp "github.com/bstkhq/go-ebiten-mcp"
 	"github.com/hajimehoshi/ebiten/v2"
@@ -199,6 +201,47 @@ func TestAGameSeesAKeyHeldOnTheScreenForAsLongAsItIsHeld(t *testing.T) {
 			t.Errorf("after the mouse let go the game saw H down: %t, released %d times, keys down: %v", g.hDown, g.hUps, g.down)
 		}
 	})
+}
+
+func TestAGameReadsASecondClickThatComesBetweenTwoUpdates(t *testing.T) {
+	h := sit(t)
+
+	first, second := h.middle("H"), h.middle("I")
+
+	mouse := h.Runtime().Injector()
+	h.Move(float64(first.X), float64(first.Y))
+	mouse.MouseDown(ebiten.MouseButtonLeft)
+	h.Tick(4)
+
+	// Inside one tick, as a slow update or a low tick rate leaves room for: the button goes
+	// up, the mouse moves to I, the button goes down again.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err := h.Runtime().Do(ctx, func() {
+		mouse.MouseUp(ebiten.MouseButtonLeft)
+		mouse.MoveCursor(float64(second.X), float64(second.Y))
+		mouse.MouseDown(ebiten.MouseButtonLeft)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h.Tick(3)
+
+	if got := h.text(); got != "HI" {
+		t.Errorf("two clicks, the second between two updates, typed %q, want HI", got)
+	}
+
+	h.read(func(g *reader) {
+		if g.hDown || g.hUps != 1 || !slices.Equal(g.down, []ebiten.Key{ebiten.KeyI}) {
+			t.Errorf("after the second click the game sees H down: %t, released %d times, and these keys down: %v; want H up, released once, and I down",
+				g.hDown, g.hUps, g.down)
+		}
+	})
+
+	mouse.MouseUp(ebiten.MouseButtonLeft)
+	h.Tick(2)
 }
 
 func TestAGameReadsTouchesOnTheKeys(t *testing.T) {

@@ -28,10 +28,24 @@ type board struct {
 }
 
 // Update is the next tick of the board: its clock moves on and the keyboard takes in the
-// fingers.
+// fingers. A finger has landed for the one tick it came down in.
 func (b board) Update() {
 	b.next()
 	b.Keyboard.Update()
+
+	for i := range *b.fingers {
+		(*b.fingers)[i].Landed = false
+	}
+}
+
+// reland lifts finger id and puts it down again on the key that shows face, between two
+// updates: the keyboard is told that it landed, as Ebitengine tells of a second quick click.
+func (b board) reland(t *testing.T, id osk.PointerID, face string) {
+	t.Helper()
+
+	b.lift(id)
+	b.touch(t, id, face)
+	(*b.fingers)[len(*b.fingers)-1].Landed = true
 }
 
 // compactBoard is the stock compact en-US keyboard in a 1000 × 400 rectangle whose top is at 100.
@@ -572,5 +586,97 @@ func TestAKeyboardGivenNoInputAndNoPointersUsesItsOwn(t *testing.T) {
 
 	if got := keyboard.AppendEvents(nil); len(got) != 0 {
 		t.Errorf("a keyboard nothing touches made the events %v", got)
+	}
+}
+
+func TestASecondClickBetweenTwoUpdatesPressesItsOwnKey(t *testing.T) {
+	b := compactBoard(t)
+
+	b.touch(t, osk.Mouse, "H")
+
+	for range 4 {
+		b.Update()
+	}
+
+	// The mouse lets go, moves to I and presses again before the next update: one pointer
+	// that never seemed to lift, unless it says it landed.
+	b.reland(t, osk.Mouse, "I")
+	b.Update()
+
+	if got := b.typed(); got != "I" {
+		t.Errorf("the second click typed %q, want I", got)
+	}
+
+	if !b.input.IsKeyJustReleased(ebiten.KeyH) || b.input.IsKeyPressed(ebiten.KeyH) {
+		t.Error("the first click's key must go up when the second click lands elsewhere")
+	}
+
+	if !b.input.IsKeyJustPressed(ebiten.KeyI) {
+		t.Error("the second click's key must go down")
+	}
+
+	want := []osk.Event{
+		{Kind: osk.KeyUp, Key: ebiten.KeyH},
+		{Kind: osk.KeyDown, Key: ebiten.KeyI},
+		{Kind: osk.Text, Text: "I"},
+	}
+
+	if got := b.AppendEvents(nil); !sameEvents(got, want) {
+		t.Errorf("the second click made the events %v, want %v", got, want)
+	}
+
+	if b.key(t, "H").State != osk.StateIdle || b.key(t, "I").State != osk.StatePressed {
+		t.Errorf("after the second click H is %v and I is %v, want idle and pressed", b.key(t, "H").State, b.key(t, "I").State)
+	}
+}
+
+func TestTwoQuickClicksOnOneKeyAreTwoPresses(t *testing.T) {
+	b := compactBoard(t)
+
+	b.touch(t, osk.Mouse, "Delete")
+	b.Update()
+	b.Update()
+
+	if got := b.input.KeyPressDuration(ebiten.KeyBackspace); got != 2 {
+		t.Fatalf("erase held for two ticks has the duration %d", got)
+	}
+
+	// Up and down again on the same key before the next update: a game that erases on a
+	// press must erase again.
+	b.reland(t, osk.Mouse, "Delete")
+	b.Update()
+
+	if !b.input.IsKeyJustPressed(ebiten.KeyBackspace) || !b.input.IsKeyJustReleased(ebiten.KeyBackspace) {
+		t.Errorf("a second quick click on erase: just pressed %t, just released %t, want both, as Ebitengine tells of a key pressed again",
+			b.input.IsKeyJustPressed(ebiten.KeyBackspace), b.input.IsKeyJustReleased(ebiten.KeyBackspace))
+	}
+
+	if !b.input.IsKeyPressed(ebiten.KeyBackspace) || b.input.KeyPressDuration(ebiten.KeyBackspace) != 1 {
+		t.Errorf("a second quick click on erase: pressed %t for %d ticks, want pressed for one",
+			b.input.IsKeyPressed(ebiten.KeyBackspace), b.input.KeyPressDuration(ebiten.KeyBackspace))
+	}
+
+	want := []osk.Event{{Kind: osk.KeyUp, Key: ebiten.KeyBackspace}, {Kind: osk.KeyDown, Key: ebiten.KeyBackspace}}
+
+	if got := b.AppendEvents(nil); !sameEvents(got, want) {
+		t.Errorf("a second quick click on erase made the events %v, want %v", got, want)
+	}
+
+	b.Update()
+
+	if b.input.IsKeyJustPressed(ebiten.KeyBackspace) || b.input.IsKeyJustReleased(ebiten.KeyBackspace) || b.input.KeyPressDuration(ebiten.KeyBackspace) != 2 {
+		t.Error("the tick after the second click, erase must be held with no edge, for two ticks")
+	}
+
+	// The same on a letter types it twice.
+	b.lift(osk.Mouse)
+	b.Update()
+	b.touch(t, osk.Mouse, "A")
+	b.Update()
+	b.reland(t, osk.Mouse, "A")
+	b.Update()
+
+	if got := b.typed(); got != "A" {
+		t.Errorf("the second quick click on a letter typed %q, want the letter again", got)
 	}
 }

@@ -2,9 +2,7 @@ package osk
 
 import (
 	"fmt"
-	"maps"
 	"math"
-	"slices"
 
 	"github.com/hajimehoshi/ebiten/v2"
 )
@@ -140,40 +138,30 @@ func Erase() Action {
 	return Action{kind: erases}
 }
 
-// position is the physical position the action presses, if it has one.
-func (a Action) position(positions Positions) (ebiten.Key, bool) {
+// position is the physical position the action presses, or noPosition for one that is text
+// only: its text is not one character, or the layout gives that character no position that
+// Ebitengine has.
+func (a Action) position(positions Positions) ebiten.Key {
 	if a.kind == erases {
-		return ebiten.KeyBackspace, true
+		return ebiten.KeyBackspace
 	}
 
 	runes := []rune(a.text)
 	if len(runes) != 1 {
-		return 0, false
+		return noPosition
 	}
 
 	key, ok := positions[runes[0]]
+	if !ok || key < 0 || key > ebiten.KeyMax {
+		return noPosition
+	}
 
 	// A modifier named for either side has no key of its own: it stands for the left one.
 	if both, named := sides[key]; named {
 		key = both[0]
 	}
 
-	return key, ok && key >= 0 && key <= ebiten.KeyMax
-}
-
-// clone is a copy of the layout that shares nothing with it.
-func (l Layout) clone() Layout {
-	layers := make([]Layer, len(l.Layers))
-
-	for i, layer := range l.Layers {
-		layers[i].Rows = make([][]Key, len(layer.Rows))
-
-		for j, row := range layer.Rows {
-			layers[i].Rows[j] = slices.Clone(row)
-		}
-	}
-
-	return Layout{Layers: layers, Positions: maps.Clone(l.Positions)}
+	return key
 }
 
 // check says why a keyboard cannot work with the layout, or nil.
