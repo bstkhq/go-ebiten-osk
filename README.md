@@ -1,5 +1,7 @@
 # go-ebiten-osk
 
+[![Checks](https://github.com/bstkhq/go-ebiten-osk/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/bstkhq/go-ebiten-osk/actions/workflows/checks.yml)
+
 An on-screen keyboard for [Ebitengine](https://ebitengine.org) that a game reads like a physical one.
 
 A game on a touchscreen with no system keyboard (a kiosk, a cabinet) has no way to let people type. This library draws a keyboard in the game, and lets the game read it with the functions it already uses: the library has a copy of Ebitengine's keyboard-reading functions, with the same names and signatures, that answers for the physical keyboard and the on-screen one together. Moving a game to the on-screen keyboard is a change of import.
@@ -96,6 +98,35 @@ The suite needs a display, as anything that links Ebitengine does. With [go-ebit
 ```sh
 ebitenmcp run --gpu -- go test ./...
 ```
+
+GitHub Actions uses a private display with software rendering and compares the golden pictures with the driver's tolerance. On Linux, install the [Ebitengine build dependencies](https://ebitengine.org/en/documents/install.html), Xvfb, and Mesa to run the same checks locally.
+
+```sh
+go build ./...
+go vet ./...
+go run github.com/bstkhq/go-ebiten-mcp/cmd/ebitenmcp run --x local --addr "" -- go test -count=1 ./...
+```
+
+When the checkout contains tests in `hook/internal/upstream`, run the declaration check separately with no display.
+
+```sh
+env -u DISPLAY -u WAYLAND_DISPLAY go test -count=1 ./hook/internal/upstream
+```
+
+When `hook/nohook.go` is present, also run the suite with the hook compiled out.
+
+```sh
+go run github.com/bstkhq/go-ebiten-mcp/cmd/ebitenmcp run --x local --addr "" -- go test -count=1 -tags ebitenosk_nohook ./...
+```
+
+With golangci-lint v2.15.0 installed and `origin/main` fetched, run the same advisory report and changed-line check as on a topic branch.
+
+```sh
+golangci-lint run --issues-exit-code=0
+golangci-lint run --new-from-merge-base=origin/main
+```
+
+The changed-line check uses committed changes. On `main`, CI reports lint findings across the module.
 
 The golden pictures under `testdata` were drawn by a hardware renderer, named beside each one: a software renderer may not match them to the pixel.
 
