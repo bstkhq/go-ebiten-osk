@@ -16,6 +16,7 @@ type Keyboard struct {
 	rect     image.Rectangle
 	hidden   bool
 	pointers Pointers
+	input    *Input
 
 	// keys are the keys of the layer in view, placed in the rectangle. fingers counts the
 	// pointers each one holds.
@@ -29,6 +30,10 @@ type Keyboard struct {
 	events  []Event
 	typed   []rune
 	presses presses
+
+	// updated is the tick of the last update: an input stops hearing a keyboard that is no
+	// longer updated.
+	updated int64
 }
 
 const noKey = -1
@@ -97,9 +102,8 @@ func New(layout Layout, opts ...Option) (*Keyboard, error) {
 		opt(&o)
 	}
 
-	k := &Keyboard{layout: layout, pointers: o.pointers, landed: map[PointerID]int{}}
+	k := &Keyboard{layout: layout, pointers: o.pointers, input: o.input, landed: map[PointerID]int{}}
 	k.place()
-	o.input.keyboards = append(o.input.keyboards, k)
 
 	return k, nil
 }
@@ -147,7 +151,8 @@ func (k *Keyboard) AppendEvents(events []Event) []Event {
 
 // Update takes in the pointers of this tick. A pointer that lands on a key presses it, and
 // types its text, until that pointer lifts; where it moves in between changes nothing. Call
-// it once every tick, shown or hidden, before reading the input.
+// it once every tick, shown or hidden, before reading the input: an input stops hearing a
+// keyboard that is no longer updated, as if every key it held had vanished.
 func (k *Keyboard) Update() {
 	k.events = k.events[:0]
 	k.typed = k.typed[:0]
@@ -156,6 +161,7 @@ func (k *Keyboard) Update() {
 	k.lift()
 	k.land()
 	k.presses.tick()
+	k.input.hear(k)
 }
 
 // lift releases the keys of the pointers that are no longer down, and of all of them while

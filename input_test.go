@@ -60,7 +60,8 @@ func both(t *testing.T) (*desk, *finger, *Keyboard, *Input) {
 	t.Helper()
 
 	physical := &desk{held: map[ebiten.Key]int{}, released: map[ebiten.Key]bool{}}
-	input := &Input{physical: physical}
+	input := NewInput()
+	input.physical = physical
 	touch := &finger{x: 50, y: 50}
 
 	layout := Layout{
@@ -210,5 +211,53 @@ func TestAPositionEbitengineDoesNotKnowIsTextOnly(t *testing.T) {
 
 	if got := string(input.AppendInputChars(nil)); got != "x" {
 		t.Errorf("the key typed %q, want x", got)
+	}
+}
+
+func TestAnInputStopsHearingAKeyboardThatIsNoLongerUpdated(t *testing.T) {
+	_, touch, keyboard, input := both(t)
+
+	now := int64(10)
+	input.tick = func() int64 { return now }
+
+	touch.down = true
+	keyboard.Update()
+
+	// A game that reads before it updates its keyboard hears it a tick late.
+	now++
+
+	if !input.IsKeyPressed(ebiten.KeyQ) || string(input.AppendInputChars(nil)) != "q" {
+		t.Error("the tick after its update, a keyboard must still be heard")
+	}
+
+	// The game dropped the keyboard with a finger on it: the key must not stay down for ever.
+	now++
+
+	if input.IsKeyPressed(ebiten.KeyQ) || input.KeyPressDuration(ebiten.KeyQ) != 0 || len(input.AppendInputChars(nil)) != 0 {
+		t.Error("two ticks after its last update, a keyboard is still heard")
+	}
+
+	if len(input.AppendJustPressedKeys(nil)) != 0 {
+		t.Error("a keyboard that is no longer heard pressed a key")
+	}
+
+	// Another keyboard takes its place: the dropped one is forgotten, not kept.
+	other, err := New(Layout{Layers: []Layer{{Rows: [][]Key{{{Do: Type("w")}}}}}}, WithPointers(&finger{}), WithInput(input))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	other.Update()
+	other.Update()
+
+	if len(input.keyboards) != 1 || input.keyboards[0] != other {
+		t.Errorf("the input keeps %d keyboards, want only the one still updated", len(input.keyboards))
+	}
+
+	// Updated again, the first one is heard again.
+	keyboard.Update()
+
+	if !input.IsKeyPressed(ebiten.KeyQ) {
+		t.Error("a keyboard that is updated again must be heard again")
 	}
 }

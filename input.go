@@ -1,6 +1,8 @@
 package osk
 
 import (
+	"slices"
+
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
@@ -13,14 +15,18 @@ import (
 // The package's functions of the same names answer from a default Input that every keyboard
 // feeds unless it is made [WithInput] another.
 type Input struct {
-	physical  physical
+	physical physical
+
+	// keyboards are the on-screen keyboards that fed the input lately. tick is the game's
+	// clock, by which a keyboard that stopped updating is told from one that goes on.
 	keyboards []*Keyboard
+	tick      func() int64
 }
 
 // NewInput is an input that hears the physical keyboard, and the keyboards made [WithInput]
 // it.
 func NewInput() *Input {
-	return &Input{physical: hardware{}}
+	return &Input{physical: hardware{}, tick: ebiten.Tick}
 }
 
 var defaultInput = NewInput()
@@ -51,7 +57,9 @@ func (in *Input) AppendInputChars(runes []rune) []rune {
 	runes = in.physical.AppendInputChars(runes)
 
 	for _, keyboard := range in.keyboards {
-		runes = append(runes, keyboard.typed...)
+		if in.hears(keyboard) {
+			runes = append(runes, keyboard.typed...)
+		}
 	}
 
 	return runes
@@ -115,7 +123,7 @@ func (in *Input) wasPressed(key ebiten.Key) bool {
 	}
 
 	for _, keyboard := range in.keyboards {
-		if keyboard.presses.was[key] {
+		if in.hears(keyboard) && keyboard.presses.was[key] {
 			return true
 		}
 	}
@@ -131,10 +139,30 @@ func (in *Input) onScreenTicks(key ebiten.Key) int {
 
 	ticks := 0
 	for _, keyboard := range in.keyboards {
-		ticks = max(ticks, keyboard.presses.ticks[key])
+		if in.hears(keyboard) {
+			ticks = max(ticks, keyboard.presses.ticks[key])
+		}
 	}
 
 	return ticks
+}
+
+// hear takes the keyboard's update of this tick in, and forgets the keyboards that stopped
+// updating.
+func (in *Input) hear(keyboard *Keyboard) {
+	keyboard.updated = in.tick()
+
+	in.keyboards = slices.DeleteFunc(in.keyboards, func(other *Keyboard) bool {
+		return other == keyboard || !in.hears(other)
+	})
+	in.keyboards = append(in.keyboards, keyboard)
+}
+
+// hears says whether the keyboard was updated in this tick or in the one before. The one
+// before counts so that a game that reads before it updates its keyboard still hears it, a
+// tick late.
+func (in *Input) hears(keyboard *Keyboard) bool {
+	return in.tick()-keyboard.updated <= 1
 }
 
 func known(key ebiten.Key) bool {
