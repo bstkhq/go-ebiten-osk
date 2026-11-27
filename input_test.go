@@ -99,6 +99,11 @@ func newBoth(t *testing.T) *both {
 	keyboard.SetRect(image.Rect(0, 0, 100, 100))
 	b.keyboard = keyboard
 
+	// A keyboard listens for landings from its first update on: the test begins on the tick
+	// after it.
+	keyboard.Update()
+	b.tick()
+
 	return b
 }
 
@@ -402,7 +407,7 @@ func TestAKeyboardThatIsNoLongerUpdatedLetsGoOfItsKeysOnce(t *testing.T) {
 	}
 }
 
-func TestAKeyboardThatIsUpdatedAgainPressesWhatItStillHolds(t *testing.T) {
+func TestAKeyboardThatMissedATickPressesNothingUntilAFingerLandsAgain(t *testing.T) {
 	b := newBoth(t)
 
 	b.touch.down = true
@@ -419,23 +424,39 @@ func TestAKeyboardThatIsUpdatedAgainPressesWhatItStillHolds(t *testing.T) {
 		t.Fatalf("the tick the keyboard is not updated: the input says %+v, want %+v", got, want)
 	}
 
-	// It updates it again: what the game sees is a new press, typed once, long ago.
+	// It updates it again. The finger was down all along, but the keyboard was not listening
+	// when it could have landed: the key stays up, and the keyboard tells its own readers
+	// that it let go.
 	b.tick()
 	b.keyboard.Update()
 
-	if got, want := b.q(), (q{pressed: true, justPressed: true, duration: 1}); got != want {
-		t.Errorf("the tick the keyboard is updated again: the input says %+v, want %+v", got, want)
+	if got := b.q(); got != (q{}) {
+		t.Errorf("the tick the keyboard is updated again, under a finger that never lifted: the input says %+v, want nothing", got)
+	}
+
+	if got := b.keyboard.AppendEvents(nil); len(got) != 1 || got[0] != (Event{Kind: KeyUp, Key: ebiten.KeyQ}) {
+		t.Errorf("the keyboard that missed a tick made the events %v, want the key it held going up", got)
 	}
 
 	if got := string(b.input.AppendInputChars(nil)); got != "" {
 		t.Errorf("the key that was held all along typed %q again", got)
 	}
 
+	// The finger lifts and lands again: that is a press, and it types.
 	b.tick()
+	b.touch.down = false
 	b.keyboard.Update()
 
-	if got, want := b.q(), (q{pressed: true, duration: 2}); got != want {
-		t.Errorf("the tick after: the input says %+v, want %+v", got, want)
+	b.tick()
+	b.touch.down = true
+	b.keyboard.Update()
+
+	if got, want := b.q(), (q{pressed: true, justPressed: true, duration: 1}); got != want {
+		t.Errorf("the finger lands again: the input says %+v, want %+v", got, want)
+	}
+
+	if got := string(b.input.AppendInputChars(nil)); got != "q" {
+		t.Errorf("the finger that landed again typed %q, want q", got)
 	}
 }
 
@@ -474,7 +495,8 @@ func TestAPositionEbitengineDoesNotKnowIsTextOnly(t *testing.T) {
 		Layers:    []Layer{{Rows: [][]Key{{{Do: Type("x")}, {Do: Type("y")}}}}},
 	}
 
-	touch := &finger{down: true, x: 10, y: 10}
+	// The finger lands in the tick of the keyboard's first update, and says so.
+	touch := &finger{down: true, again: true, x: 10, y: 10}
 	input, _ := SteppedInput()
 
 	keyboard, err := New(layout, WithPointers(touch), WithInput(input))
@@ -565,10 +587,10 @@ func TestAHoldAGameWatchedWithNoKeyboardPassesToTheOneThatComes(t *testing.T) {
 		b.tick()
 	}
 
-	// The field opens: its keyboard's first update comes with the finger on the key, in the
-	// tick the physical key goes up.
+	// The field opens: its keyboard's first update in a long while comes with a finger that
+	// lands on the key in that very tick, the one the physical key goes up in.
 	b.physical.release(ebiten.KeyQ)
-	b.touch.down = true
+	b.touch.down, b.touch.again = true, true
 	b.keyboard.Update()
 
 	if got, want := b.q(), (q{pressed: true, duration: 7}); got != want {
@@ -588,7 +610,7 @@ func TestAHoldNobodyWatchedPassesToTheScreenWithNoNewPress(t *testing.T) {
 	}
 
 	b.physical.release(ebiten.KeyQ)
-	b.touch.down = true
+	b.touch.down, b.touch.again = true, true
 	b.keyboard.Update()
 
 	// It was down when the tick before ended, so this is no new press: the hold is as old
@@ -599,8 +621,8 @@ func TestAHoldNobodyWatchedPassesToTheScreenWithNoNewPress(t *testing.T) {
 }
 
 func TestAModifierNamedForEitherSideIsPressedWithOneOfItsKeysOnTheScreen(t *testing.T) {
-	touch := &finger{down: true, x: 10, y: 10}
-	input, _ := SteppedInput()
+	touch := &finger{x: 10, y: 10}
+	input, next := SteppedInput()
 
 	// The first key is at the left shift's position. The second names control for either
 	// side, which is no key: it stands for the left one.
@@ -614,10 +636,14 @@ func TestAModifierNamedForEitherSideIsPressedWithOneOfItsKeysOnTheScreen(t *test
 
 	keyboard.SetRect(image.Rect(0, 0, 100, 100))
 
+	keyboard.Update()
+
 	if input.IsKeyPressed(ebiten.KeyShift) {
 		t.Fatal("shift is pressed before anything touched it")
 	}
 
+	next()
+	touch.down = true
 	keyboard.Update()
 
 	if !input.IsKeyPressed(ebiten.KeyShiftLeft) || !input.IsKeyPressed(ebiten.KeyShift) {
@@ -629,10 +655,12 @@ func TestAModifierNamedForEitherSideIsPressedWithOneOfItsKeysOnTheScreen(t *test
 		t.Error("a key at the left shift's position pressed the right shift or control")
 	}
 
+	next()
 	touch.x = 60
 	touch.down = false
 	keyboard.Update()
 
+	next()
 	touch.down = true
 	keyboard.Update()
 
@@ -670,7 +698,7 @@ func TestAKeyPressedAgainOnTheScreenUnderThePhysicalOneStaysOneHold(t *testing.T
 func TestAKeyPressedAgainOnOneKeyboardWhileAnotherHoldsItStaysOneHold(t *testing.T) {
 	b := newBoth(t)
 
-	touch := &finger{down: true, x: 50, y: 50}
+	touch := &finger{x: 50, y: 50}
 
 	other, err := New(Layout{
 		Positions: Positions{'q': ebiten.KeyQ},
@@ -682,12 +710,21 @@ func TestAKeyPressedAgainOnOneKeyboardWhileAnotherHoldsItStaysOneHold(t *testing
 
 	other.SetRect(image.Rect(0, 0, 100, 100))
 
-	// Both keyboards hold Q. Whichever is updated last, one of them pressing again between
-	// two updates leaves the key down: the other holds it.
-	b.touch.down = true
 	b.keyboard.Update()
 	other.Update()
 
+	// Both keyboards hold Q.
+	b.tick()
+	b.touch.down, touch.down = true, true
+	b.keyboard.Update()
+	other.Update()
+
+	if got, want := b.q(), (q{pressed: true, justPressed: true, duration: 1}); got != want {
+		t.Fatalf("both keyboards press the key: the input says %+v, want %+v", got, want)
+	}
+
+	// One of them presses again between two updates, the other holds on: the key was never
+	// up, whichever of the two the game updates first.
 	b.tick()
 	b.touch.again = true
 	b.keyboard.Update()
@@ -704,5 +741,26 @@ func TestAKeyPressedAgainOnOneKeyboardWhileAnotherHoldsItStaysOneHold(t *testing
 
 	if got, want := b.q(), (q{pressed: true, duration: 3}); got != want {
 		t.Errorf("the keyboard updated last presses again: the input says %+v, want %+v", got, want)
+	}
+
+	// The game updates them in the other order this tick, as one that ranges over a map of
+	// keyboards may.
+	b.tick()
+	touch.again = true
+	other.Update()
+	b.keyboard.Update()
+
+	if got, want := b.q(), (q{pressed: true, duration: 4}); got != want {
+		t.Errorf("the order of the updates changes as one presses again: the input says %+v, want %+v", got, want)
+	}
+
+	// Both press again in one tick: nobody held the key through it, and it is a new press.
+	b.tick()
+	b.touch.again, touch.again = true, true
+	other.Update()
+	b.keyboard.Update()
+
+	if got, want := b.q(), (q{pressed: true, justPressed: true, justReleased: true, duration: 1}); got != want {
+		t.Errorf("both keyboards press again in one tick: the input says %+v, want %+v", got, want)
 	}
 }

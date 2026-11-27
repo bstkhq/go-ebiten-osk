@@ -17,6 +17,11 @@ type Keyboard struct {
 	pointers Pointers
 	input    *Input
 
+	// updated is the tick of the last update. A keyboard listens for landings from one
+	// update to the next: a pointer it finds down after a tick without an update came down
+	// while it was not listening, and presses nothing.
+	updated int64
+
 	// rows are the rows of the layer in view: the keyboard's own copy of them.
 	rows [][]Key
 
@@ -31,11 +36,23 @@ type Keyboard struct {
 	landed map[PointerID]int
 	down   []Pointer
 
-	events []Event
+	// events is what the keyboard did in its last update, and changes what became of the
+	// physical positions in it.
+	events  []Event
+	changes []change
 
 	// held counts the keys pressed at each physical position: two keys of a layer may stand
 	// for one position, which goes down with the first and up with the last.
 	held [ebiten.KeyMax + 1]int
+}
+
+// A change is what became of a physical position in one update of a keyboard: whether the
+// keyboard held it when the update began, and whether it went down in the update. With
+// whether the keyboard holds it after, that tells a landing from a key let go and pressed
+// again, and from one pressed and let go at once.
+type change struct {
+	key             ebiten.Key
+	before, pressed bool
 }
 
 const (
@@ -107,7 +124,7 @@ func New(layout Layout, opts ...Option) (*Keyboard, error) {
 		o.input = defaultInput
 	}
 
-	k := &Keyboard{pointers: o.pointers, input: o.input, landed: map[PointerID]int{}}
+	k := &Keyboard{pointers: o.pointers, input: o.input, updated: never, landed: map[PointerID]int{}}
 
 	for _, row := range layout.Layers[0].Rows {
 		k.rows = append(k.rows, slices.Clone(row))
@@ -166,24 +183,44 @@ func (k *Keyboard) AppendEvents(events []Event) []Event {
 }
 
 // Update takes in the pointers of this tick. A pointer that lands on a key presses it, and
-// types its text, until that pointer lifts; where it moves in between changes nothing. Call
-// it once every tick, shown or hidden, before reading the input: an input answers for a
-// keyboard only in the ticks it was updated in, and a keyboard that is no longer updated lets
-// go of every key it held.
+// types its text, until that pointer lifts; where it moves in between changes nothing.
+//
+// Call it once every tick, shown or hidden, before reading the input: an input answers for a
+// keyboard only in the ticks it was updated in. A keyboard listens for landings from one
+// update to the next. After a tick without an update, and on its first, it lets go of what it
+// held, and a pointer it finds down presses nothing until it lifts and lands again, unless it
+// says it landed in this very tick. A second update in one tick does nothing.
 func (k *Keyboard) Update() {
+	now := k.input.tick()
+	if now == k.updated {
+		return
+	}
+
+	listening := k.updated == now-1
+	k.updated = now
+
 	k.events = k.events[:0]
+	k.changes = k.changes[:0]
 	k.down = k.pointers.AppendPointers(k.down[:0])
 
-	k.lift()
-	k.land()
-	k.input.feed(k, &k.held, k.events)
+	k.lift(listening)
+
+	if !listening {
+		// What it let go of was let go of while nobody was told: the game has seen
+		// those keys go up already, and what comes now is no key pressed again.
+		k.changes = k.changes[:0]
+	}
+
+	k.land(listening)
+	k.input.feed(&k.held, k.changes, k.events)
 }
 
 // lift releases the keys of the pointers that are no longer down, or that lifted and landed
-// again since the last update, and of all of them while the keyboard is hidden.
-func (k *Keyboard) lift() {
+// again since the last update; and of all of them while the keyboard is hidden or was not
+// listening.
+func (k *Keyboard) lift(listening bool) {
 	for id, key := range k.landed {
-		if k.hidden || !stayedDown(k.down, id) {
+		if !listening || k.hidden || !stayedDown(k.down, id) {
 			k.release(key)
 			delete(k.landed, id)
 		}
@@ -201,21 +238,29 @@ func stayedDown(down []Pointer, id PointerID) bool {
 	return false
 }
 
-// land presses the keys under the pointers that came down in this tick. A pointer that came
-// down while the keyboard was hidden, or outside every key, holds no key until it lifts.
-func (k *Keyboard) land() {
+// land presses the keys under the pointers that came down in this tick: those that say so,
+// and those the keyboard did not see in the tick before while it was listening. A pointer
+// that came down while the keyboard was hidden or not listening, or outside every key, holds
+// no key until it lifts. One that lifted again within the tick lets go at once.
+func (k *Keyboard) land(listening bool) {
 	for _, pointer := range k.down {
 		if _, known := k.landed[pointer.ID]; known {
 			continue
 		}
 
 		key := noKey
-		if !k.hidden {
+		if !k.hidden && (listening || pointer.Landed) {
 			key = k.keyAt(pointer.X, pointer.Y)
 		}
 
-		k.landed[pointer.ID] = key
 		k.press(key)
+
+		if pointer.Lifted {
+			k.release(key)
+			key = noKey
+		}
+
+		k.landed[pointer.ID] = key
 	}
 }
 
@@ -245,11 +290,12 @@ func (k *Keyboard) press(key int) {
 	k.keys[key].State = StatePressed
 
 	if position := k.positions[key]; position != noPosition {
-		k.held[position]++
-
-		if k.held[position] == 1 {
+		if k.held[position] == 0 {
+			k.changed(position).pressed = true
 			k.events = append(k.events, Event{Kind: KeyDown, Key: position})
 		}
+
+		k.held[position]++
 	}
 
 	if text := k.keys[key].Do.text; text != "" {
@@ -271,12 +317,27 @@ func (k *Keyboard) release(key int) {
 	k.keys[key].State = StateIdle
 
 	if position := k.positions[key]; position != noPosition {
-		k.held[position]--
-
-		if k.held[position] == 0 {
+		if k.held[position] == 1 {
+			k.changed(position)
 			k.events = append(k.events, Event{Kind: KeyUp, Key: position})
 		}
+
+		k.held[position]--
 	}
+}
+
+// changed is the change of the position in this update, begun now if it is its first: asked
+// before the position goes down or up, so that it knows how the update found it.
+func (k *Keyboard) changed(position ebiten.Key) *change {
+	for i := range k.changes {
+		if k.changes[i].key == position {
+			return &k.changes[i]
+		}
+	}
+
+	k.changes = append(k.changes, change{key: position, before: k.held[position] > 0})
+
+	return &k.changes[len(k.changes)-1]
 }
 
 // place lays the rows out in the rectangle. What each key holds stays as it is.

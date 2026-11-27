@@ -28,14 +28,37 @@ type board struct {
 }
 
 // Update is the next tick of the board: its clock moves on and the keyboard takes in the
-// fingers. A finger has landed for the one tick it came down in.
+// fingers. A finger has landed for the one tick it came down in, and one that lifted in it is
+// gone after.
 func (b board) Update() {
 	b.next()
 	b.Keyboard.Update()
 
-	for i := range *b.fingers {
-		(*b.fingers)[i].Landed = false
+	kept := (*b.fingers)[:0]
+
+	for _, finger := range *b.fingers {
+		if !finger.Lifted {
+			finger.Landed = false
+			kept = append(kept, finger)
+		}
 	}
+
+	*b.fingers = kept
+}
+
+// skip is a tick in which the game does not update the board.
+func (b board) skip() {
+	b.next()
+}
+
+// tap is a click on the key that shows face, begun and ended between two updates.
+func (b board) tap(t *testing.T, id osk.PointerID, face string) {
+	t.Helper()
+
+	b.touch(t, id, face)
+
+	last := &(*b.fingers)[len(*b.fingers)-1]
+	last.Landed, last.Lifted = true, true
 }
 
 // reland lifts finger id and puts it down again on the key that shows face, between two
@@ -73,6 +96,9 @@ func newBoard(t *testing.T, layout osk.Layout) board {
 
 	keyboard.SetRect(image.Rect(0, 100, 1000, 500))
 	b.Keyboard = keyboard
+
+	// A keyboard listens for landings from its first update on.
+	b.Update()
 
 	return b
 }
@@ -678,5 +704,133 @@ func TestTwoQuickClicksOnOneKeyAreTwoPresses(t *testing.T) {
 
 	if got := b.typed(); got != "A" {
 		t.Errorf("the second quick click on a letter typed %q, want the letter again", got)
+	}
+}
+
+func TestAClickBegunAndEndedBetweenTwoUpdatesIsAPressAndAReleaseInOneTick(t *testing.T) {
+	b := compactBoard(t)
+
+	b.tap(t, osk.Mouse, "H")
+	b.Update()
+
+	want := []osk.Event{
+		{Kind: osk.KeyDown, Key: ebiten.KeyH},
+		{Kind: osk.Text, Text: "H"},
+		{Kind: osk.KeyUp, Key: ebiten.KeyH},
+	}
+
+	if got := b.AppendEvents(nil); !sameEvents(got, want) {
+		t.Errorf("a whole click between two updates made the events %v, want %v", got, want)
+	}
+
+	// As Ebitengine tells of a physical key tapped within a tick: pressed, just pressed and
+	// just released in it, for no time at all.
+	if !b.input.IsKeyPressed(ebiten.KeyH) || !b.input.IsKeyJustPressed(ebiten.KeyH) || !b.input.IsKeyJustReleased(ebiten.KeyH) {
+		t.Errorf("a whole click between two updates: pressed %t, just pressed %t, just released %t, want all three in its tick",
+			b.input.IsKeyPressed(ebiten.KeyH), b.input.IsKeyJustPressed(ebiten.KeyH), b.input.IsKeyJustReleased(ebiten.KeyH))
+	}
+
+	if got := b.input.KeyPressDuration(ebiten.KeyH); got != 0 {
+		t.Errorf("a whole click between two updates has the duration %d, want 0", got)
+	}
+
+	if got := b.typed(); got != "H" {
+		t.Errorf("a whole click between two updates typed %q, want H", got)
+	}
+
+	if got := b.key(t, "H").State; got != osk.StateIdle {
+		t.Errorf("after a whole click the key is %v, want idle", got)
+	}
+
+	b.Update()
+
+	if b.input.IsKeyPressed(ebiten.KeyH) || b.input.IsKeyJustReleased(ebiten.KeyH) || len(b.AppendEvents(nil)) != 0 {
+		t.Error("the tick after a whole click, nothing more must happen")
+	}
+}
+
+// unopened is a compact board that has never been updated, with its fingers and its input.
+func unopened(t *testing.T) board {
+	t.Helper()
+
+	layout, err := osk.Stock(osk.EnUS, osk.Compact)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	b := board{fingers: &fingers{}}
+	b.input, b.next = osk.SteppedInput()
+
+	keyboard, err := osk.New(layout, osk.WithPointers(b.fingers), osk.WithInput(b.input))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	keyboard.SetRect(image.Rect(0, 100, 1000, 500))
+	b.Keyboard = keyboard
+
+	return b
+}
+
+func TestAKeyboardOpenedUnderAPointerThatWasDownTypesNothing(t *testing.T) {
+	b := unopened(t)
+
+	// The press that opened the keyboard is still down, and happens to be over Q.
+	b.touch(t, osk.Mouse, "Q")
+	b.Update()
+	b.Update()
+
+	if got := b.typed(); got != "" || len(b.input.AppendPressedKeys(nil)) != 0 || len(b.AppendEvents(nil)) != 0 {
+		t.Errorf("a keyboard opened under a pointer that was down typed %q and pressed %v", got, b.input.AppendPressedKeys(nil))
+	}
+
+	if got := b.key(t, "Q").State; got != osk.StateIdle {
+		t.Errorf("the key under the pointer that was down is %v, want idle", got)
+	}
+
+	// Lifted and landed again, the same pointer types.
+	b.lift(osk.Mouse)
+	b.Update()
+	b.touch(t, osk.Mouse, "Q")
+	b.Update()
+
+	if got := b.typed(); got != "Q" {
+		t.Errorf("the pointer that landed again typed %q, want Q", got)
+	}
+}
+
+func TestAKeyboardOpenedInTheTickAPointerLandsTypes(t *testing.T) {
+	b := unopened(t)
+
+	// The pointer says it landed in this very tick, as Ebitengine's mouse does.
+	b.touch(t, osk.Mouse, "Q")
+	(*b.fingers)[0].Landed = true
+	b.Update()
+
+	if got := b.typed(); got != "Q" || !b.input.IsKeyJustPressed(ebiten.KeyQ) {
+		t.Errorf("a pointer that landed in the tick of the keyboard's first update typed %q, just pressed %t; want Q and a press",
+			got, b.input.IsKeyJustPressed(ebiten.KeyQ))
+	}
+}
+
+func TestAKeyboardThatMissedATickLetsGoAndTakesNoFingerThatStayedDown(t *testing.T) {
+	b := compactBoard(t)
+
+	b.touch(t, 1, "Q")
+	b.Update()
+
+	// The game leaves the keyboard out of a tick, and comes back to it with the finger where
+	// it was.
+	b.skip()
+	b.Update()
+
+	want := []osk.Event{{Kind: osk.KeyUp, Key: ebiten.KeyQ}}
+
+	if got := b.AppendEvents(nil); !sameEvents(got, want) {
+		t.Errorf("the keyboard that missed a tick made the events %v, want %v", got, want)
+	}
+
+	if b.input.IsKeyPressed(ebiten.KeyQ) || b.key(t, "Q").State != osk.StateIdle || b.typed() != "" {
+		t.Error("a finger that stayed down through a tick the keyboard missed must hold no key")
 	}
 }

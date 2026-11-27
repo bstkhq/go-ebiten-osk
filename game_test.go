@@ -35,6 +35,9 @@ type reader struct {
 	down     []ebiten.Key
 	hLongest int
 	hUps     int
+
+	// hTaps counts the ticks in which H went down and up at once, for no time at all.
+	hTaps int
 }
 
 func newReader() ebiten.Game {
@@ -72,6 +75,10 @@ func (g *reader) Update() error {
 
 	if osk.IsKeyJustReleased(ebiten.KeyH) {
 		g.hUps++
+	}
+
+	if osk.IsKeyJustPressed(ebiten.KeyH) && osk.IsKeyJustReleased(ebiten.KeyH) && osk.KeyPressDuration(ebiten.KeyH) == 0 {
+		g.hTaps++
 	}
 
 	return nil
@@ -239,6 +246,106 @@ func TestAGameReadsASecondClickThatComesBetweenTwoUpdates(t *testing.T) {
 				g.hDown, g.hUps, g.down)
 		}
 	})
+
+	mouse.MouseUp(ebiten.MouseButtonLeft)
+	h.Tick(2)
+}
+
+// inOneTick does what do says between two updates of the game.
+func (h hands) inOneTick(do func()) {
+	h.t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := h.Runtime().Do(ctx, do); err != nil {
+		h.t.Fatal(err)
+	}
+}
+
+func TestAGameSeesAClickBegunAndEndedBetweenTwoUpdatesInOneTick(t *testing.T) {
+	h := sit(t)
+
+	at := h.middle("H")
+	h.Move(float64(at.X), float64(at.Y))
+
+	mouse := h.Runtime().Injector()
+
+	h.inOneTick(func() {
+		mouse.MouseDown(ebiten.MouseButtonLeft)
+		mouse.MouseUp(ebiten.MouseButtonLeft)
+	})
+	h.Tick(3)
+
+	if got := h.text(); got != "H" {
+		t.Errorf("a whole click between two updates typed %q, want H", got)
+	}
+
+	h.read(func(g *reader) {
+		if g.hTaps != 1 || g.hUps != 1 || g.hDown {
+			t.Errorf("a whole click between two updates: the game saw H go down and up in one tick %d times, up %d times, and down now: %t; want once, once, and up",
+				g.hTaps, g.hUps, g.hDown)
+		}
+	})
+}
+
+func TestAKeyboardTheGameOpensUnderAHeldMouseTypesNothing(t *testing.T) {
+	h := sit(t)
+
+	over := h.middle("H")
+	mouse := h.Runtime().Injector()
+
+	// A press above the board, on what would be the game's own button, which opens the
+	// keyboard under the cursor: the button is still down when the new keyboard first updates.
+	h.read(func(g *reader) { g.keyboard = nil })
+	h.Move(float64(over.X), 10)
+	mouse.MouseDown(ebiten.MouseButtonLeft)
+	h.Tick(2)
+	h.Move(float64(over.X), float64(over.Y))
+
+	h.read(func(g *reader) { g.keyboard = newReader().(*reader).keyboard })
+	h.Tick(3)
+
+	mouse.MouseUp(ebiten.MouseButtonLeft)
+	h.Tick(2)
+
+	h.read(func(g *reader) {
+		if len(g.text) != 0 || len(g.pressed) != 0 {
+			t.Errorf("a keyboard opened under a held mouse typed %q and pressed %v, want nothing", string(g.text), g.pressed)
+		}
+	})
+
+	// The click after that is a click.
+	h.click("H")
+
+	if got := h.text(); got != "H" {
+		t.Errorf("the first real click on the opened keyboard typed %q, want H", got)
+	}
+}
+
+func TestAKeyboardTheGameOpensInTheTickOfAClickTypes(t *testing.T) {
+	h := sit(t)
+
+	over := h.middle("H")
+	mouse := h.Runtime().Injector()
+
+	h.read(func(g *reader) { g.keyboard = nil })
+	h.Move(float64(over.X), float64(over.Y))
+
+	var game *reader
+
+	h.read(func(g *reader) { game = g })
+
+	// The keyboard appears and the button goes down on H between the same two updates.
+	h.inOneTick(func() {
+		game.keyboard = newReader().(*reader).keyboard
+		mouse.MouseDown(ebiten.MouseButtonLeft)
+	})
+	h.Tick(3)
+
+	if got := h.text(); got != "H" {
+		t.Errorf("a click in the tick the keyboard opened typed %q, want H", got)
+	}
 
 	mouse.MouseUp(ebiten.MouseButtonLeft)
 	h.Tick(2)
