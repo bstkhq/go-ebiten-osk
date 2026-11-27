@@ -35,11 +35,15 @@ jobs:
 
       # The hook's upstream declaration checks live in a package without Ebitengine.
       - name: Test without a display
-        if: ${{ hashFiles('internal/upstream/*_test.go') != '' }}
-        run: env -u DISPLAY -u WAYLAND_DISPLAY go test -count=1 ./internal/upstream
+        if: ${{ hashFiles('hook/internal/upstream/*_test.go') != '' }}
+        run: env -u DISPLAY -u WAYLAND_DISPLAY go test -count=1 ./hook/internal/upstream
 
       - name: Test under a display
         run: go run github.com/bstkhq/go-ebiten-mcp/cmd/ebitenmcp run --x local --addr "" -- go test -count=1 ./...
+
+      - name: Test under a display with the hook compiled out
+        if: ${{ hashFiles('hook/nohook.go') != '' }}
+        run: go run github.com/bstkhq/go-ebiten-mcp/cmd/ebitenmcp run --x local --addr "" -- go test -count=1 -tags ebitenosk_nohook ./...
 
       - name: Install golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9

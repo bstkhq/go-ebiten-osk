@@ -68,7 +68,7 @@ go vet ./...
 go run github.com/bstkhq/go-ebiten-mcp/cmd/ebitenmcp run --x local --addr "" -- go test -count=1 ./...
 ```
 
-For a hardware-backed display on Linux, use `run --gpu --addr "" -- go test -count=1 ./...` with the same launcher. The golden pictures under `testdata` have their recording renderer named beside each image. The driver compares them with its tolerance and identifies a renderer difference if the comparison fails.
+For a hardware-backed display on Linux, replace `run --x local` with `run --gpu`. CI compares the golden pictures on its software renderer using the driver's tolerance. Each golden under `testdata` names its recording renderer, which the driver reports if a comparison fails across renderers.
 
 With golangci-lint v2.15.0 installed and `origin/main` fetched, run the same advisory report and changed-line check as on a topic branch.
 
