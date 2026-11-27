@@ -1,0 +1,28 @@
+module github.com/bstkhq/go-ebiten-osk
+
+go 1.25.0
+
+require (
+	github.com/bstkhq/go-ebiten-mcp v0.3.2
+	github.com/erparts/go-shapes v0.0.0-20260702111257-2b13c09e1cbb
+	github.com/hajimehoshi/ebiten/v2 v2.9.9
+	github.com/tinne26/etxt v0.0.9
+	golang.org/x/image v0.44.0
+)
+
+require (
+	github.com/ebitengine/gomobile v0.0.0-20250923094054-ea854a63cce1 // indirect
+	github.com/ebitengine/hideconsole v1.0.0 // indirect
+	github.com/ebitengine/purego v0.9.0 // indirect
+	github.com/google/jsonschema-go v0.4.3 // indirect
+	github.com/jezek/xgb v1.1.1 // indirect
+	github.com/modelcontextprotocol/go-sdk v1.7.0 // indirect
+	github.com/segmentio/asm v1.1.3 // indirect
+	github.com/segmentio/encoding v0.5.4 // indirect
+	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
+	golang.org/x/oauth2 v0.35.0 // indirect
+	golang.org/x/sync v0.22.0 // indirect
+	golang.org/x/sys v0.41.0 // indirect
+	golang.org/x/text v0.40.0 // indirect
+	golang.org/x/time v0.15.0 // indirect
+)
