@@ -74,11 +74,13 @@ func Dark() Theme {
 }
 
 // goBold is Go Bold, parsed once: every stock theme shares it.
-var goBold = sync.OnceValue(func() *sfnt.Font {
+var goBold = sync.OnceValue(parseGoBold)
+
+func parseGoBold() *sfnt.Font {
 	font, err := sfnt.Parse(gobold.TTF)
 	if err != nil {
 		panic("paint: Go Bold, which ships with x/image, does not parse: " + err.Error())
 	}
 
 	return font
-})
+}
