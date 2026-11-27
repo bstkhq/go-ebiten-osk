@@ -1,0 +1,7 @@
+# What the coverage command and go-ebiten-mcp's test driver leave behind.
+/target/
+.ebitenmcp/
+
+# The binary `go build ./examples/typing` drops in the working directory.
+/typing
+/typing.exe
