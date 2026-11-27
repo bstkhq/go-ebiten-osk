@@ -361,6 +361,119 @@ func TestAKeyboardTheGameOpensInTheTickOfAClickTypes(t *testing.T) {
 	h.Tick(2)
 }
 
+func TestAFingerThatLandsInTheTickTheKeyboardOpensTypes(t *testing.T) {
+	h := sit(t)
+
+	over := h.middle("H")
+	fingers := h.Runtime().Injector()
+
+	var game *reader
+
+	h.read(func(g *reader) { game, g.keyboard = g, nil })
+	h.Tick(2)
+
+	// The keyboard appears and a finger lands on H between the same two updates, then stays.
+	h.inOneTick(func() {
+		game.keyboard = newReader().(*reader).keyboard
+		fingers.SetTouches([]ebitenmcp.Touch{{ID: 7, X: over.X, Y: over.Y}})
+	})
+	h.Tick(3)
+
+	h.read(func(g *reader) {
+		if string(g.text) != "H" || !g.hDown || g.hUps != 0 {
+			t.Errorf("a finger that landed in the tick the keyboard opened: the game read %q, sees H down: %t, released %d times; want H, held, not released",
+				string(g.text), g.hDown, g.hUps)
+		}
+	})
+
+	fingers.SetTouches(nil)
+	h.settle()
+
+	h.read(func(g *reader) {
+		if g.hDown || g.hUps != 1 {
+			t.Errorf("after the finger lifted the game sees H down: %t, released %d times; want up, once", g.hDown, g.hUps)
+		}
+	})
+}
+
+func TestAKeyboardTheGameOpensOrComesBackToUnderAFingerTypesNothing(t *testing.T) {
+	h := sit(t)
+
+	over := h.middle("H")
+	fingers := h.Runtime().Injector()
+
+	// A finger is down where H will be before the keyboard is there.
+	h.read(func(g *reader) { g.keyboard = nil })
+	fingers.SetTouches([]ebitenmcp.Touch{{ID: 7, X: over.X, Y: over.Y}})
+	h.Tick(3)
+
+	var opened *osk.Keyboard
+
+	h.read(func(g *reader) {
+		g.keyboard = newReader().(*reader).keyboard
+		opened = g.keyboard
+	})
+	h.Tick(3)
+
+	h.read(func(g *reader) {
+		if len(g.text) != 0 || len(g.pressed) != 0 {
+			t.Errorf("a keyboard opened under a finger that was down typed %q and pressed %v, want nothing", string(g.text), g.pressed)
+		}
+	})
+
+	// The same finger lifts and lands again: that types. Then the game leaves the keyboard
+	// out of its updates for a while, with the finger down, and comes back to it.
+	fingers.SetTouches(nil)
+	h.settle()
+	fingers.SetTouches([]ebitenmcp.Touch{{ID: 7, X: over.X, Y: over.Y}})
+	h.Tick(3)
+
+	h.read(func(g *reader) { g.keyboard = nil })
+	h.Tick(3)
+	h.read(func(g *reader) { g.keyboard = opened })
+	h.Tick(3)
+
+	h.read(func(g *reader) {
+		if string(g.text) != "H" || g.hDown || g.hUps != 1 {
+			t.Errorf("a keyboard the game came back to under a finger that stayed down: the game read %q, sees H down: %t, released %d times; want one H, up, released once",
+				string(g.text), g.hDown, g.hUps)
+		}
+	})
+
+	fingers.SetTouches(nil)
+	h.settle()
+}
+
+func TestAKeyboardGivenNoInputAndNoPointersUsesItsOwn(t *testing.T) {
+	h := sit(t)
+
+	at := h.middle("H")
+
+	// A game that passes what it has, and has nothing yet: the keyboard reads Ebitengine's
+	// pointers and feeds the input the package's functions answer from.
+	h.read(func(g *reader) {
+		layout, err := osk.Stock(osk.EnUS, osk.Compact)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		keyboard, err := osk.New(layout, osk.WithInput(nil), osk.WithPointers(nil))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		keyboard.SetRect(image.Rect(0, 120, 640, 360))
+		g.keyboard = keyboard
+	})
+	h.Tick(2)
+
+	h.Click(float64(at.X), float64(at.Y))
+
+	if got := h.text(); got != "H" {
+		t.Errorf("a click on a keyboard given no input and no pointers typed %q, want H", got)
+	}
+}
+
 func TestAGameReadsTouchesOnTheKeys(t *testing.T) {
 	h := sit(t)
 

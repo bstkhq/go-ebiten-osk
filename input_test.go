@@ -85,6 +85,7 @@ func newBoth(t *testing.T) *both {
 	b := &both{physical: newDesk(), touch: &finger{x: 50, y: 50}, input: NewInput()}
 	b.input.physical = b.physical
 	b.input.tick = func() int64 { return b.now }
+	b.input.screen = nil // Ebitengine's touches are the running game's, not this test's
 
 	layout := Layout{
 		Positions: Positions{'q': ebiten.KeyQ},

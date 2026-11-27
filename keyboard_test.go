@@ -595,26 +595,6 @@ func TestTwoKeysOfOnePositionAreOneKeyToAGame(t *testing.T) {
 	}
 }
 
-func TestAKeyboardGivenNoInputAndNoPointersUsesItsOwn(t *testing.T) {
-	layout, err := osk.Stock(osk.EnUS, osk.Compact)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// A game that passes what it has, and has nothing yet.
-	keyboard, err := osk.New(layout, osk.WithInput(nil), osk.WithPointers(nil))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	keyboard.SetRect(image.Rect(0, 0, 1000, 400))
-	keyboard.Update()
-
-	if got := keyboard.AppendEvents(nil); len(got) != 0 {
-		t.Errorf("a keyboard nothing touches made the events %v", got)
-	}
-}
-
 func TestASecondClickBetweenTwoUpdatesPressesItsOwnKey(t *testing.T) {
 	b := compactBoard(t)
 

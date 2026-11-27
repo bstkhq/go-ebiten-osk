@@ -32,6 +32,10 @@ type Input struct {
 
 	// typed is what the on-screen keyboards typed in the tick now.
 	typed []rune
+
+	// screen is Ebitengine's touches, which the input watches in every tick it starts, so
+	// that a keyboard opened later can tell a finger that lands from one that was down.
+	screen *fingers
 }
 
 // never is a tick that never comes: the stamp of what has not happened.
@@ -40,7 +44,7 @@ const never = math.MinInt64 / 2
 // NewInput is an input that hears the physical keyboard, and the keyboards made [WithInput]
 // it.
 func NewInput() *Input {
-	in := &Input{physical: hardware{}, tick: ebiten.Tick, now: never}
+	in := &Input{physical: hardware{}, tick: ebiten.Tick, now: never, screen: &touches}
 
 	for i := range in.positions {
 		in.positions[i] = nothing
@@ -198,6 +202,10 @@ func (in *Input) begin() int64 {
 	watched := in.now == now-1
 	in.now = now
 	in.typed = in.typed[:0]
+
+	if in.screen != nil {
+		in.screen.watch()
+	}
 
 	for i := range in.positions {
 		key := ebiten.Key(i)

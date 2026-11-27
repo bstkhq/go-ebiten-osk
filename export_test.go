@@ -10,5 +10,8 @@ func SteppedInput() (input *Input, next func()) {
 	now := int64(0)
 	input.tick = func() int64 { return now }
 
+	// The test's clock is not the game's: Ebitengine's touches are left to the game.
+	input.screen = nil
+
 	return input, func() { now++ }
 }

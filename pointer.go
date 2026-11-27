@@ -1,6 +1,8 @@
 package osk
 
 import (
+	"slices"
+
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
@@ -42,9 +44,7 @@ type Pointers interface {
 
 // screen is Ebitengine's own pointers: the mouse while its left button is down, then the
 // touches.
-type screen struct {
-	touches []ebiten.TouchID
-}
+type screen struct{}
 
 // mouseLanded says whether the left button went down in this tick, and mouseLifted whether it
 // is up again already: Ebitengine tells of a click that began and ended within the tick as
@@ -58,18 +58,59 @@ func mouseLifted() bool {
 		inpututil.MouseButtonPressDuration(ebiten.MouseButtonLeft) == 0
 }
 
-func (s *screen) AppendPointers(pointers []Pointer) []Pointer {
+func (screen) AppendPointers(pointers []Pointer) []Pointer {
 	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
 		x, y := ebiten.CursorPosition()
 		pointers = append(pointers, Pointer{ID: Mouse, X: x, Y: y, Landed: mouseLanded(), Lifted: mouseLifted()})
 	}
 
-	s.touches = ebiten.AppendTouchIDs(s.touches[:0])
+	touches.watch()
 
-	for _, id := range s.touches {
+	for _, id := range touches.down {
 		x, y := ebiten.TouchPosition(id)
-		pointers = append(pointers, Pointer{ID: PointerID(id), X: x, Y: y})
+		pointers = append(pointers, Pointer{ID: PointerID(id), X: x, Y: y, Landed: touches.landed(id)})
 	}
 
 	return pointers
+}
+
+// touches is Ebitengine's touches from one tick to the next. Ebitengine tells which fingers
+// are down, not which have just come down: a keyboard that opens under fingers has to tell the
+// one that lands in that very tick, which types, from one that was down already, which must
+// not. So the touches are watched whenever an input is fed or asked, keyboard or no keyboard.
+//
+// They are the game's, like Ebitengine's own state: watched from the game's Update alone.
+var touches fingers
+
+type fingers struct {
+	// at is the tick last watched, and seen whether any was.
+	at   int64
+	seen bool
+
+	// down are the touches down in that tick. before are those of the tick before it, known
+	// when that tick was watched too.
+	down, before []ebiten.TouchID
+	known        bool
+}
+
+// watch takes in the touches of this tick, the first time it is asked in it.
+func (f *fingers) watch() {
+	now := ebiten.Tick()
+	if f.seen && now == f.at {
+		return
+	}
+
+	f.known = f.seen && now == f.at+1
+	f.before, f.down = f.down, ebiten.AppendTouchIDs(f.before[:0])
+	f.at, f.seen = now, true
+}
+
+// landed says whether the touch came down in this tick. Where the tick before was not
+// watched, it is what inpututil makes of the touch.
+func (f *fingers) landed(id ebiten.TouchID) bool {
+	if f.known {
+		return !slices.Contains(f.before, id)
+	}
+
+	return inpututil.TouchPressDuration(id) == 1
 }
