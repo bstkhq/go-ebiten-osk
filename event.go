@@ -31,16 +31,7 @@ const (
 )
 
 func (k EventKind) String() string {
-	switch k {
-	case KeyDown:
-		return "key down"
-	case KeyUp:
-		return "key up"
-	case Text:
-		return "text"
-	default:
-		return fmt.Sprintf("EventKind(%d)", int(k))
-	}
+	return named("EventKind", int(k), "", "key down", "key up", "text")
 }
 
 func (e Event) String() string {

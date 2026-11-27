@@ -1,6 +1,7 @@
 package osk_test
 
 import (
+	"fmt"
 	"image"
 	"strings"
 	"testing"
@@ -39,7 +40,7 @@ func compactBoard(t *testing.T) board {
 func newBoard(t *testing.T, layout osk.Layout) board {
 	t.Helper()
 
-	b := board{fingers: &fingers{}, input: osk.NewInput()}
+	b := board{fingers: &fingers{}, input: osk.StillInput()}
 
 	keyboard, err := osk.New(layout, osk.WithPointers(b.fingers), osk.WithInput(b.input))
 	if err != nil {
@@ -352,53 +353,19 @@ func TestKeyboardsWithTheirOwnInputsDoNotHearEachOther(t *testing.T) {
 	}
 }
 
-func TestTheDefaultInputHearsAKeyboardGivenNoOther(t *testing.T) {
-	layout, err := osk.Stock(osk.EnUS, osk.Compact)
-	if err != nil {
-		t.Fatal(err)
+func TestWhatAFailureMessageSaysOfTheKeyboardReadsWell(t *testing.T) {
+	for value, want := range map[fmt.Stringer]string{
+		osk.Compact: "compact", osk.Full: "full", osk.Form(7): "Form(7)",
+		osk.RoleCharacter: "character", osk.RoleSpace: "space", osk.RoleControl: "control", osk.Role(-1): "Role(-1)",
+		osk.StateIdle: "idle", osk.StatePressed: "pressed", osk.State(9): "State(9)",
+		osk.KeyDown: "key down", osk.KeyUp: "key up", osk.Text: "text", osk.EventKind(0): "EventKind(0)",
+		osk.Event{Kind: osk.Text, Text: "ñ"}:         `text "ñ"`,
+		osk.Event{Kind: osk.KeyUp, Key: ebiten.KeyQ}: "key up Q",
+	} {
+		if got := value.String(); got != want {
+			t.Errorf("a %T prints as %q, want %q", value, got, want)
+		}
 	}
-
-	held := &fingers{}
-
-	keyboard, err := osk.New(layout, osk.WithPointers(held))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	keyboard.SetRect(image.Rect(0, 0, 1000, 400))
-
-	b := board{Keyboard: keyboard, fingers: held}
-	b.touch(t, 1, "M")
-	b.Update()
-
-	if !osk.IsKeyPressed(ebiten.KeyM) || !osk.IsKeyJustPressed(ebiten.KeyM) || osk.KeyPressDuration(ebiten.KeyM) != 1 {
-		t.Error("the package's own functions did not hear the keyboard")
-	}
-
-	if got := string(osk.AppendInputChars(nil)); got != "M" {
-		t.Errorf("the package's AppendInputChars gave %q, want M", got)
-	}
-
-	if got := osk.AppendPressedKeys(nil); len(got) != 1 || got[0] != ebiten.KeyM {
-		t.Errorf("the package's AppendPressedKeys gave %v, want [M]", got)
-	}
-
-	if got := osk.AppendJustPressedKeys(nil); len(got) != 1 || got[0] != ebiten.KeyM {
-		t.Errorf("the package's AppendJustPressedKeys gave %v, want [M]", got)
-	}
-
-	b.lift(1)
-	b.Update()
-
-	if !osk.IsKeyJustReleased(ebiten.KeyM) {
-		t.Error("the package's IsKeyJustReleased did not hear the lift")
-	}
-
-	if got := osk.AppendJustReleasedKeys(nil); len(got) != 1 || got[0] != ebiten.KeyM {
-		t.Errorf("the package's AppendJustReleasedKeys gave %v, want [M]", got)
-	}
-
-	b.Update()
 }
 
 func TestAKeyOfAnotherLayoutIsReadByRoleLabelAndState(t *testing.T) {

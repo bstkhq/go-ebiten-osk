@@ -1,7 +1,6 @@
 package osk
 
 import (
-	"fmt"
 	"image"
 	"math"
 
@@ -59,16 +58,7 @@ const (
 	StatePressed
 )
 
-func (s State) String() string {
-	switch s {
-	case StateIdle:
-		return "idle"
-	case StatePressed:
-		return "pressed"
-	default:
-		return fmt.Sprintf("State(%d)", int(s))
-	}
-}
+func (s State) String() string { return named("State", int(s), "idle", "pressed") }
 
 // An Option changes how a keyboard is made.
 type Option func(*options)

@@ -86,16 +86,20 @@ func (g *game) Layout(int, int) (int, int) {
 	return width, height
 }
 
-func main() {
+func run() error {
 	g, err := newGame()
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	ebiten.SetWindowSize(width, height)
 	ebiten.SetWindowTitle("go-ebiten-osk: typing")
 
-	if err := ebiten.RunGame(g); err != nil {
+	return ebiten.RunGame(g)
+}
+
+func main() {
+	if err := run(); err != nil {
 		log.Fatal(err)
 	}
 }

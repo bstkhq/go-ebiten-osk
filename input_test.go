@@ -60,7 +60,7 @@ func both(t *testing.T) (*desk, *finger, *Keyboard, *Input) {
 	t.Helper()
 
 	physical := &desk{held: map[ebiten.Key]int{}, released: map[ebiten.Key]bool{}}
-	input := NewInput()
+	input := StillInput()
 	input.physical = physical
 	touch := &finger{x: 50, y: 50}
 
@@ -195,7 +195,7 @@ func TestAPositionEbitengineDoesNotKnowIsTextOnly(t *testing.T) {
 	}
 
 	touch := &finger{down: true, x: 10, y: 10}
-	input := NewInput()
+	input := StillInput()
 
 	keyboard, err := New(layout, WithPointers(touch), WithInput(input))
 	if err != nil {

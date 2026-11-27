@@ -25,15 +25,16 @@ const (
 	Full
 )
 
-func (f Form) String() string {
-	switch f {
-	case Compact:
-		return "compact"
-	case Full:
-		return "full"
-	default:
-		return fmt.Sprintf("Form(%d)", int(f))
+func (f Form) String() string { return named("Form", int(f), "compact", "full") }
+
+// named is the name of the value i of an enumeration, for a message a person reads: names[i],
+// or what Go would print for a value that has none.
+func named(enumeration string, i int, names ...string) string {
+	if i < 0 || i >= len(names) || names[i] == "" {
+		return fmt.Sprintf("%s(%d)", enumeration, i)
 	}
+
+	return names[i]
 }
 
 // A Layout is the keys of one locale in one form.
@@ -90,18 +91,7 @@ const (
 	RoleControl
 )
 
-func (r Role) String() string {
-	switch r {
-	case RoleCharacter:
-		return "character"
-	case RoleSpace:
-		return "space"
-	case RoleControl:
-		return "control"
-	default:
-		return fmt.Sprintf("Role(%d)", int(r))
-	}
-}
+func (r Role) String() string { return named("Role", int(r), "character", "space", "control") }
 
 // Role is what the key is for, told from what it does.
 func (k Key) Role() Role {
