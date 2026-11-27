@@ -102,7 +102,8 @@ func positionsEnUS() Positions {
 }
 
 // positionsEsES follows the Spanish physical positions checked against
-// xkeyboard-config's es(basic). The grave sign uses the position of the grave key.
+// xkeyboard-config's es(basic), including the positions of the standalone grave
+// and acute marks. Composed letters type text without pressing those positions.
 func positionsEsES() Positions {
 	return withLettersAndDigits(Positions{
 		' ': ebiten.KeySpace,
@@ -111,6 +112,7 @@ func positionsEsES() Positions {
 		'º': ebiten.KeyBackquote, '<': ebiten.KeyIntlBackslash,
 		'\'': ebiten.KeyMinus, '¡': ebiten.KeyEqual,
 		'`': ebiten.KeyBracketLeft, '+': ebiten.KeyBracketRight,
+		'´': ebiten.KeyQuote,
 		',': ebiten.KeyComma, '.': ebiten.KeyPeriod, '-': ebiten.KeySlash,
 	})
 }

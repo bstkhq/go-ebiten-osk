@@ -75,7 +75,7 @@ func TestCompactLayersTypeAndReturnToLetters(t *testing.T) {
 			positions: map[rune]ebiten.Key{
 				'Ñ': ebiten.KeySemicolon, 'Ç': ebiten.KeyBackslash, 'º': ebiten.KeyBackquote,
 				'<': ebiten.KeyIntlBackslash, '\'': ebiten.KeyMinus, '¡': ebiten.KeyEqual,
-				'`': ebiten.KeyBracketLeft, '+': ebiten.KeyBracketRight, ',': ebiten.KeyComma,
+				'`': ebiten.KeyBracketLeft, '´': ebiten.KeyQuote, '+': ebiten.KeyBracketRight, ',': ebiten.KeyComma,
 				'.': ebiten.KeyPeriod, '-': ebiten.KeySlash,
 			},
 		},
