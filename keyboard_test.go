@@ -19,10 +19,19 @@ func (f *fingers) AppendPointers(pointers []osk.Pointer) []osk.Pointer {
 }
 
 // board is a keyboard under test: its own fingers and its own input, so no test hears another.
+// Its input is on a clock of its own, on which every update of the keyboard is a tick.
 type board struct {
 	*osk.Keyboard
 	fingers *fingers
 	input   *osk.Input
+	next    func()
+}
+
+// Update is the next tick of the board: its clock moves on and the keyboard takes in the
+// fingers.
+func (b board) Update() {
+	b.next()
+	b.Keyboard.Update()
 }
 
 // compactBoard is the stock compact en-US keyboard in a 1000 × 400 rectangle whose top is at 100.
@@ -40,7 +49,8 @@ func compactBoard(t *testing.T) board {
 func newBoard(t *testing.T, layout osk.Layout) board {
 	t.Helper()
 
-	b := board{fingers: &fingers{}, input: osk.StillInput()}
+	b := board{fingers: &fingers{}}
+	b.input, b.next = osk.SteppedInput()
 
 	keyboard, err := osk.New(layout, osk.WithPointers(b.fingers), osk.WithInput(b.input))
 	if err != nil {

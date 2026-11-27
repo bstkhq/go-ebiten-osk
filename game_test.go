@@ -52,7 +52,9 @@ func newReader() ebiten.Game {
 }
 
 func (g *reader) Update() error {
-	g.keyboard.Update()
+	if g.keyboard != nil {
+		g.keyboard.Update()
+	}
 
 	if osk.IsKeyJustPressed(ebiten.KeyBackspace) && len(g.text) > 0 {
 		g.text = g.text[:len(g.text)-1]
@@ -241,7 +243,7 @@ func TestTheSameGameStillReadsThePhysicalKeyboard(t *testing.T) {
 	})
 }
 
-func TestAKeyboardTheGameDropsIsNoLongerHeard(t *testing.T) {
+func TestAGameThatDropsItsOnlyKeyboardSeesItsKeysGoUpOnce(t *testing.T) {
 	h := sit(t)
 
 	at := h.middle("H")
@@ -249,16 +251,14 @@ func TestAKeyboardTheGameDropsIsNoLongerHeard(t *testing.T) {
 	h.Runtime().Injector().MouseDown(ebiten.MouseButtonLeft)
 	h.Tick(2)
 
-	// The game swaps its keyboard for a new one while the mouse still holds H on the old.
-	h.read(func(g *reader) {
-		g.keyboard = newReader().(*reader).keyboard
-		g.keyboard.Hide()
-	})
-	h.Tick(4)
+	// The text field closes while the mouse still holds H: the game drops its keyboard and
+	// goes on reading the input, with no other keyboard in its place.
+	h.read(func(g *reader) { g.keyboard = nil })
+	h.Tick(6)
 
 	h.read(func(g *reader) {
 		if g.hDown || len(g.down) != 0 {
-			t.Errorf("four ticks after its keyboard was dropped, the game still sees H down: %t, keys down: %v", g.hDown, g.down)
+			t.Errorf("six ticks after its keyboard was dropped, the game still sees H down: %t, keys down: %v", g.hDown, g.down)
 		}
 
 		if g.hUps != 1 || string(g.text) != "H" {
@@ -268,4 +268,16 @@ func TestAKeyboardTheGameDropsIsNoLongerHeard(t *testing.T) {
 
 	h.Runtime().Injector().MouseUp(ebiten.MouseButtonLeft)
 	h.Tick(1)
+
+	// The physical H afterwards is a press like any other.
+	h.Tap(ebiten.KeyH)
+
+	h.read(func(g *reader) {
+		want := []ebiten.Key{ebiten.KeyH, ebiten.KeyH}
+
+		if !slices.Equal(g.pressed, want) || !slices.Equal(g.released, want) {
+			t.Errorf("H on the dropped keyboard and then on the physical one: the game saw %v pressed and %v released, want %v of each",
+				g.pressed, g.released, want)
+		}
+	})
 }

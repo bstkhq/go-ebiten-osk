@@ -26,13 +26,12 @@ type Keyboard struct {
 	landed map[PointerID]int
 	down   []Pointer
 
-	events  []Event
-	typed   []rune
-	presses presses
+	events []Event
+	typed  []rune
 
-	// updated is the tick of the last update: an input stops hearing a keyboard that is no
-	// longer updated.
-	updated int64
+	// held counts the keys pressed at each physical position: two keys of a layer may stand
+	// for one position, which goes down with the first and up with the last.
+	held [ebiten.KeyMax + 1]int
 }
 
 const noKey = -1
@@ -154,8 +153,7 @@ func (k *Keyboard) Update() {
 
 	k.lift()
 	k.land()
-	k.presses.tick(k.input.physical)
-	k.input.hear(k)
+	k.input.feed(&k.held, k.typed)
 }
 
 // lift releases the keys of the pointers that are no longer down, and of all of them while
@@ -224,9 +222,9 @@ func (k *Keyboard) press(key int) {
 	action := k.keys[key].Do
 
 	if position, ok := action.position(k.layout.Positions); ok {
-		k.presses.held[position]++
+		k.held[position]++
 
-		if k.presses.held[position] == 1 {
+		if k.held[position] == 1 {
 			k.events = append(k.events, Event{Kind: KeyDown, Key: position})
 		}
 	}
@@ -251,9 +249,9 @@ func (k *Keyboard) release(key int) {
 	k.keys[key].State = StateIdle
 
 	if position, ok := k.keys[key].Do.position(k.layout.Positions); ok {
-		k.presses.held[position]--
+		k.held[position]--
 
-		if k.presses.held[position] == 0 {
+		if k.held[position] == 0 {
 			k.events = append(k.events, Event{Kind: KeyUp, Key: position})
 		}
 	}
@@ -303,44 +301,4 @@ func rowWeight(row []Key) float64 {
 	}
 
 	return total
-}
-
-// presses is what a keyboard holds of each physical position, as its input reads it.
-type presses struct {
-	// held counts the keys pressed at each position: two keys of a layer may stand for one
-	// position, and it goes down with the first and up with the last.
-	held [ebiten.KeyMax + 1]int
-	// ticks is how many updates the hold each position is part of has lasted; zero is up.
-	// A hold may be older than the keyboard's own press: it began on the physical key.
-	ticks [ebiten.KeyMax + 1]int
-	// was says whether each position was pressed after the update before the last.
-	was [ebiten.KeyMax + 1]bool
-	// older is by how many ticks a hold the keyboard left to the physical key is older than
-	// that key's own press.
-	older [ebiten.KeyMax + 1]int
-}
-
-// tick moves every position one update on. A hold that the physical keyboard and the
-// on-screen one pass between them without the key going up is one hold, and keeps its age.
-func (p *presses) tick(hardware physical) {
-	for position := range p.held {
-		physical := hardware.KeyPressDuration(ebiten.Key(position))
-		if physical == 0 {
-			p.older[position] = 0
-		} else {
-			physical += p.older[position]
-		}
-
-		p.was[position] = p.ticks[position] > 0
-
-		switch {
-		case p.held[position] > 0:
-			p.ticks[position] = max(p.ticks[position]+1, physical)
-		case p.was[position] && physical > 0:
-			p.older[position] += p.ticks[position] + 1 - physical
-			p.ticks[position] = 0
-		default:
-			p.ticks[position] = 0
-		}
-	}
 }
