@@ -7,14 +7,17 @@
 package main
 
 import (
+	"flag"
 	"image"
 	"image/color"
 	"log"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/tinne26/etxt"
 
 	osk "github.com/bstkhq/go-ebiten-osk"
+	"github.com/bstkhq/go-ebiten-osk/hook"
 	"github.com/bstkhq/go-ebiten-osk/paint"
 )
 
@@ -36,15 +39,16 @@ type game struct {
 	painter  *paint.Painter
 	text     *etxt.Renderer
 	line     []rune
+	hook     *hook.Hook
 }
 
-func newGame() (*game, error) {
+func newGame(opts ...osk.Option) (*game, error) {
 	layout, err := osk.Stock(osk.EnUS, osk.Compact)
 	if err != nil {
 		return nil, err
 	}
 
-	keyboard, err := osk.New(layout)
+	keyboard, err := osk.New(layout, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -71,11 +75,16 @@ func newGame() (*game, error) {
 func (g *game) Update() error {
 	g.keyboard.Update()
 
-	if osk.IsKeyJustPressed(ebiten.KeyBackspace) {
+	justPressed, appendChars := osk.IsKeyJustPressed, osk.AppendInputChars
+	if g.hook != nil {
+		g.hook.Update()
+		justPressed, appendChars = inpututil.IsKeyJustPressed, ebiten.AppendInputChars
+	}
+	if justPressed(ebiten.KeyBackspace) {
 		g.line = g.line[:max(len(g.line)-1, 0)]
 	}
 
-	g.line = osk.AppendInputChars(g.line)
+	g.line = appendChars(g.line)
 
 	return nil
 }
@@ -90,11 +99,22 @@ func (g *game) Layout(int, int) (int, int) {
 	return width, height
 }
 
-func run() error {
-	g, err := newGame()
+func run(useHook bool) error {
+	var h *hook.Hook
+	var opts []osk.Option
+	if useHook {
+		var err error
+		h, err = hook.New()
+		if err != nil {
+			return err
+		}
+		opts = append(opts, h.Option())
+	}
+	g, err := newGame(opts...)
 	if err != nil {
 		return err
 	}
+	g.hook = h
 
 	ebiten.SetWindowSize(width, height)
 	ebiten.SetWindowTitle("go-ebiten-osk: typing")
@@ -103,7 +123,9 @@ func run() error {
 }
 
 func main() {
-	if err := run(); err != nil {
+	useHook := flag.Bool("hook", false, "read the on-screen keys through Ebitengine")
+	flag.Parse()
+	if err := run(*useHook); err != nil {
 		log.Fatal(err)
 	}
 }

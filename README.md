@@ -44,27 +44,55 @@ go run github.com/bstkhq/go-ebiten-osk/examples/typing@latest
 
 The words used here and in the code are in the [glossary](GLOSSARY.md).
 
+## Optional Ebitengine hook
+
+Use `github.com/bstkhq/go-ebiten-osk/hook` for code that already reads
+`ebiten` and `inpututil` directly, such as a toolkit you cannot change.
+It writes keys and characters into Ebitengine's internal input snapshot.
+The hook targets Ebitengine 2.9.x releases and is tested against v2.9.9.
+Each engine minor version needs its own verification.
+
+During setup, call `hook.New()` and pass the resulting hook's `Option()` to
+`osk.New`. If `hook.New()` returns an error, omit that option to use the input
+copy. In the game's `Update`, update the hooked keyboards first, then call
+`h.Update()` before any keyboard reads or updates of keyboards that feed the
+input copy. Keep calling `h.Update()` each tick so that a keyboard you stop
+updating releases its keys. The input copy sees hooked keys and characters
+through Ebitengine, and `Keyboard.AppendEvents` is still available.
+
+Importing the hook opts into linking its engine integration. With
+`-tags ebitenosk_nohook`, the package compiles without the internal symbols
+and `hook.New()` reports that the hook is disabled. Use this tag when building
+against an engine version that has removed one of those symbols.
+
+```sh
+go run github.com/bstkhq/go-ebiten-osk/examples/typing@latest -hook
+```
+
 ## State
 
 Early. What works today:
 
 - the compact en-US board (letters, space, erase), typed with fingers or the mouse;
 - the input copy, alongside the physical keyboard;
-- the stock painter with a dark theme.
+- the stock painter with a dark theme;
+- the optional hook for Ebitengine 2.9.x.
 
-Planned, in the [issues](https://github.com/bstkhq/go-ebiten-osk/issues): layers and the es-ES boards, the full form for names and emails, erase that repeats, a light theme and the full theme model, more locales, and an optional hook that makes Ebitengine's own functions report the on-screen keys, for code that cannot be changed.
+Planned, in the [issues](https://github.com/bstkhq/go-ebiten-osk/issues): layers and the es-ES boards, the full form for names and emails, erase that repeats, a light theme and the full theme model, and more locales.
 
 Built and tested against Ebitengine v2.9.9. The API will change until the first tagged version.
 
 ## Tests
 
-The suite needs a display, as anything that links Ebitengine does. With [go-ebiten-mcp](https://github.com/bstkhq/go-ebiten-mcp), on the GPU:
+The game tests need a display. With [go-ebiten-mcp](https://github.com/bstkhq/go-ebiten-mcp), on the GPU:
 
 ```sh
 ebitenmcp run --gpu -- go test ./...
 ```
 
 The golden pictures under `testdata` were drawn by a hardware renderer, named beside each one: a software renderer may not match them to the pixel.
+
+Run `go test ./hook/internal/upstream` without a display to check the engine declarations the hook relies on.
 
 ## Licence
 

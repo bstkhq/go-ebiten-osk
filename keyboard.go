@@ -16,6 +16,7 @@ type Keyboard struct {
 	hidden   bool
 	pointers Pointers
 	input    *Input
+	write    InputWriter
 
 	// updated is the tick of the last update. A keyboard listens for landings from one
 	// update to the next: a pointer it finds down after a tick without an update came down
@@ -89,6 +90,7 @@ type Option func(*options)
 type options struct {
 	pointers Pointers
 	input    *Input
+	write    InputWriter
 }
 
 // WithPointers makes the keyboard read its pointers from somewhere other than Ebitengine's
@@ -101,6 +103,17 @@ func WithPointers(pointers Pointers) Option {
 // own functions answer from. With nil it feeds the default one.
 func WithInput(input *Input) Option {
 	return func(o *options) { o.input = input }
+}
+
+// InputWriter receives a keyboard's held physical positions and events after
+// each update. The events are valid only for the duration of the call.
+type InputWriter func(held [ebiten.KeyMax + 1]bool, events []Event)
+
+// WithInputWriter sends a keyboard's updates to writer in place of the input
+// copy. A nil writer feeds the input copy as usual. The keyboard's events
+// remain available through [Keyboard.AppendEvents].
+func WithInputWriter(writer InputWriter) Option {
+	return func(o *options) { o.write = writer }
 }
 
 // New is a keyboard of the layout, shown, on its first layer, with no rectangle yet. It
@@ -124,7 +137,7 @@ func New(layout Layout, opts ...Option) (*Keyboard, error) {
 		o.input = defaultInput
 	}
 
-	k := &Keyboard{pointers: o.pointers, input: o.input, updated: never, landed: map[PointerID]int{}}
+	k := &Keyboard{pointers: o.pointers, input: o.input, write: o.write, updated: never, landed: map[PointerID]int{}}
 
 	for _, row := range layout.Layers[0].Rows {
 		k.rows = append(k.rows, slices.Clone(row))
@@ -212,7 +225,19 @@ func (k *Keyboard) Update() {
 	}
 
 	k.land(listening)
-	k.input.feed(&k.held, k.changes, k.events)
+	k.deliver()
+}
+
+func (k *Keyboard) deliver() {
+	if k.write == nil {
+		k.input.feed(&k.held, k.changes, k.events)
+		return
+	}
+	var held [ebiten.KeyMax + 1]bool
+	for key, fingers := range k.held {
+		held[key] = fingers > 0
+	}
+	k.write(held, k.events)
 }
 
 // lift releases the keys of the pointers that are no longer down, or that lifted and landed
