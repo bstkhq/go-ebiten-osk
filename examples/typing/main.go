@@ -13,7 +13,6 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
-	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/tinne26/etxt"
 
 	osk "github.com/bstkhq/go-ebiten-osk"
@@ -82,7 +81,7 @@ func newText(size float64) *etxt.Renderer {
 func (g *game) Update() error {
 	g.keyboard.Update()
 
-	if inpututil.IsKeyJustPressed(ebiten.KeyF2) {
+	if osk.IsKeyJustPressed(ebiten.KeyF2) {
 		g.cycleLook()
 	}
 

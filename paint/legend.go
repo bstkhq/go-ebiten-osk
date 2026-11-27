@@ -6,6 +6,9 @@ import (
 
 	osk "github.com/bstkhq/go-ebiten-osk"
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/tinne26/etxt"
+	"github.com/tinne26/etxt/fract"
+	"golang.org/x/image/font/sfnt"
 )
 
 // Strokes join points on a six-unit grid centered on the key.
@@ -51,20 +54,61 @@ func (p *Painter) drawIcon(dst *ebiten.Image, area image.Rectangle, strokes []st
 	}
 }
 
-// drawLabel fits the measured label in the padded area. Leave room for glyph overhang.
+type labelGlyph struct {
+	mask   etxt.GlyphMask
+	origin fract.Point
+}
+
+// collectGlyph uses the same positioning and masks as etxt's regular draw.
+func (p *Painter) collectGlyph(_ etxt.Target, index sfnt.GlyphIndex, origin fract.Point) {
+	mask := p.text.Glyph().LoadMask(index, origin)
+	if mask == nil {
+		return
+	}
+	point := image.Pt(origin.X.ToIntFloor(), origin.Y.ToIntFloor())
+	p.ink = p.ink.Union(mask.Bounds().Add(point))
+	p.glyphs = append(p.glyphs, labelGlyph{mask, origin})
+}
+
+// drawLabel first fits the text's advance, then fits the actual ink, including overhang.
 func (p *Painter) drawLabel(dst *ebiten.Image, label string, area image.Rectangle, size float64) {
 	if label == "" || size == 0 {
 		return
 	}
 
+	// etxt limits logical sizes to just under 16,384 pixels.
+	size = min(size, 16383)
 	p.text.SetSize(size)
 	measured := p.text.Measure(label)
-	width := float64(area.Dx()) * 0.94
-	height := float64(area.Dy()) * 0.94
-	if scale := min(width/float64(measured.IntWidth()), height/float64(measured.IntHeight())); scale < 1 {
-		p.text.SetSize(size * scale)
-	}
+	scale := min(float64(area.Dx())/float64(measured.IntWidth()), float64(area.Dy())/float64(measured.IntHeight()))
+	p.text.SetSize(size * min(1, 0.94*scale))
 
 	middle := area.Min.Add(area.Size().Div(2))
-	p.text.Draw(dst, label, middle.X, middle.Y)
+	shift := p.fitInk(dst, label, middle, area)
+	for _, glyph := range p.glyphs {
+		p.text.Glyph().DrawMask(dst, glyph.mask, glyph.origin.AddPoint(shift))
+	}
+	p.resetGlyphs()
+}
+
+func (p *Painter) fitInk(dst *ebiten.Image, label string, middle image.Point, area image.Rectangle) fract.Point {
+	text := p.text.Fract()
+	for size := text.GetSize(); size > 0; size = text.GetSize() {
+		p.text.Draw(dst, label, middle.X, middle.Y)
+		scale := min(float64(area.Dx())/float64(p.ink.Dx()), float64(area.Dy())/float64(p.ink.Dy()))
+		if scale >= 1 {
+			x := max(area.Min.X-p.ink.Min.X, min(0, area.Max.X-p.ink.Max.X))
+			y := max(area.Min.Y-p.ink.Min.Y, min(0, area.Max.Y-p.ink.Max.Y))
+			return fract.IntsToPoint(x, y)
+		}
+		p.resetGlyphs()
+		text.SetSize(min(size-1, fract.FromFloat64Down(size.ToFloat64()*scale)))
+	}
+	return fract.Point{}
+}
+
+func (p *Painter) resetGlyphs() {
+	clear(p.glyphs)
+	p.glyphs = p.glyphs[:0]
+	p.ink = image.Rectangle{}
 }

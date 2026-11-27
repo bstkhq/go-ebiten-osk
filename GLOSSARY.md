@@ -29,7 +29,7 @@ One touch target of a layer. It types text, erases, or changes what the keyboard
 _Avoid_: button, cap
 
 **Role**:
-What a key is for, which decides how it is painted: a character, the space, a control.
+What a key is for. The roles are character, space, control, layer switch and action.
 _Avoid_: type, class
 
 **Kind**:

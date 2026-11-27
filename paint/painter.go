@@ -21,6 +21,8 @@ type Painter struct {
 	shapes *shapes.Renderer
 	text   *etxt.Renderer
 	keys   []osk.PlacedKey
+	glyphs []labelGlyph
+	ink    image.Rectangle
 }
 
 // New is a painter of the theme. A theme with no font draws its labels in the stock themes'
@@ -34,6 +36,7 @@ func New(theme Theme) *Painter {
 	text.Glyph().SetMissHandler(etxt.OnMissNotdef)
 
 	painter := &Painter{shapes: shapes.NewRenderer(), text: text}
+	text.Glyph().SetDrawFunc(painter.collectGlyph)
 	painter.SetTheme(theme)
 	return painter
 }
@@ -86,7 +89,7 @@ func (p *Painter) drawKey(dst *ebiten.Image, key osk.PlacedKey) {
 	} else {
 		face.Max.Y -= lip
 		p.shapes.SetColor(colors.Lip)
-		p.shapes.DrawRect(dst, cell, rounding(p.theme.Radius, row, cell))
+		p.drawLip(dst, cell, face.Max.Y, row)
 	}
 
 	radius := rounding(p.theme.Radius, row, face)
@@ -100,6 +103,21 @@ func (p *Painter) drawKey(dst *ebiten.Image, key osk.PlacedKey) {
 	p.shapes.SetColor(colors.Label)
 	p.text.SetColor(colors.Label)
 	p.drawLegend(dst, key, area, row)
+}
+
+func (p *Painter) drawLip(dst *ebiten.Image, cell image.Rectangle, top int, row float64) {
+	edge := cell
+	edge.Min.Y = top
+	origin := dst.Bounds().Min
+	edge = edge.Add(origin).Intersect(dst.Bounds())
+	if edge.Empty() {
+		return
+	}
+
+	// Clip the rounded base to the strip below the face. go-shapes takes coordinates
+	// relative to the target's origin.
+	target := dst.SubImage(edge).(*ebiten.Image)
+	p.shapes.DrawRect(target, cell.Add(origin).Sub(edge.Min), rounding(p.theme.Radius, row, cell))
 }
 
 func scaled(fraction, row, limit float64) float64 {

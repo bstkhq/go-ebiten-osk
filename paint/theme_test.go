@@ -7,6 +7,7 @@ import (
 
 	ebitenmcp "github.com/bstkhq/go-ebiten-mcp"
 	"github.com/hajimehoshi/ebiten/v2"
+	"golang.org/x/image/font/gofont/goitalic"
 	"golang.org/x/image/font/gofont/gomono"
 	"golang.org/x/image/font/sfnt"
 
@@ -139,6 +140,74 @@ func TestChangingOnlyTheGapShowsMorePanel(t *testing.T) {
 	d.Tick(1)
 	if got := colourAt(d.Screenshot(), point); got != theme.Palette.Panel {
 		t.Errorf("after changing the gap, got %v at the edge of Q, want panel colour", got)
+	}
+}
+
+func TestAnOverhangingGlyphFitsInsideItsCell(t *testing.T) {
+	d := ebitenmcp.T(t)
+	font, err := sfnt.Parse(goitalic.TTF)
+	if err != nil {
+		t.Fatal(err)
+	}
+	theme := paint.Dark()
+	theme.Font = font
+	theme.CharacterSize = 0.85
+	theme.Gap, theme.Padding = 0, 0
+
+	row := []osk.Key{{Do: osk.Type(" "), Weight: 9}, {Do: osk.Type("f")}}
+	drawLayout(t, d, osk.Layout{Layers: []osk.Layer{{Rows: [][]osk.Key{row}}}})
+	cell := image.Rect(288, boardTop, 320, boardTop+72)
+	d.WithGame(func(game ebiten.Game) {
+		g := game.(*board)
+		g.keyboard.SetRect(image.Rect(0, boardTop, cell.Max.X, cell.Max.Y))
+		g.painter.SetTheme(theme)
+	})
+	d.Tick(1)
+
+	screen := d.Screenshot()
+	hasInk := false
+	for y := boardTop; y < screenH; y++ {
+		for x := range screenW {
+			if screen.RGBAAt(x, y).R < 0x70 {
+				continue
+			}
+			hasInk = true
+			if !image.Pt(x, y).In(cell) {
+				t.Fatalf("italic f has ink outside its cell at (%d, %d)", x, y)
+			}
+		}
+	}
+	if !hasInk {
+		t.Error("the italic f did not draw")
+	}
+}
+
+func TestATransparentFaceShowsThePanelAboveTheLip(t *testing.T) {
+	d := ebitenmcp.T(t)
+	theme := paint.Dark()
+	theme.Roles[osk.RoleCharacter].All.Face = color.Transparent
+	theme.LipHeight = 0
+	setTheme := func() {
+		d.WithGame(func(game ebiten.Game) { game.(*board).painter.SetTheme(theme) })
+		d.Tick(1)
+	}
+
+	g := face(t, d, "G")
+	edge := image.Pt(300, boardTop+115)
+	setTheme()
+	if got := colourAt(d.Screenshot(), g); got != theme.Palette.Panel {
+		t.Errorf("transparent face with a zero-height lip shows %v, want the panel", got)
+	}
+
+	theme.LipHeight = paint.Dark().LipHeight
+	setTheme()
+	screen := d.Screenshot()
+	if got := colourAt(screen, g); got != theme.Palette.Panel {
+		t.Errorf("transparent face with a raised lip shows %v, want the panel", got)
+	}
+	lip := theme.Colors(osk.RoleCharacter, osk.StateIdle).Lip
+	if got := colourAt(screen, edge); got != lip {
+		t.Errorf("the lower edge shows %v, want the lip colour %v", got, lip)
 	}
 }
 
