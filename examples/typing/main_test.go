@@ -210,3 +210,30 @@ func inked(screen *image.RGBA) int {
 
 	return count
 }
+func TestTheExampleAdvancesAndSubmitsWithBothKeyboards(t *testing.T) {
+	checkFormActions(t, ebitenmcp.T(t))
+}
+
+func checkFormActions(t *testing.T, d *ebitenmcp.Driver) {
+	t.Helper()
+	d.Tap(ebiten.KeyF3)          // Show Next on the full layout for Name.
+	d.Click(width-48, height-37) // Next must focus Email once.
+	checkFormState(t, d, 1, 0)
+	d.Tap(ebiten.KeyEnter) // Physical Enter focuses Number.
+	checkFormState(t, d, 2, 0)
+	d.Click(width*5/6, height-37) // Done submits once.
+	checkFormState(t, d, 2, 1)
+	d.Tap(ebiten.KeyEnter) // Physical Enter submits again.
+	checkFormState(t, d, 2, 2)
+}
+
+func checkFormState(t *testing.T, d *ebitenmcp.Driver, field, submissions int) {
+	t.Helper()
+	d.WithGame(func(current ebiten.Game) {
+		g := current.(*game)
+		if g.active != field || g.submissions != submissions {
+			t.Errorf("active field = %s and submissions = %d, want %s and %d",
+				fields[g.active].label, g.submissions, fields[field].label, submissions)
+		}
+	})
+}

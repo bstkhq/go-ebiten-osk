@@ -17,6 +17,7 @@ type Keyboard struct {
 	pointers  Pointers
 	input     *Input
 	write     InputWriter
+	onAction  func(FieldAction)
 
 	// updated is the tick of the last update. A keyboard listens for landings from one
 	// update to the next: a pointer it finds down after a tick without an update came down
@@ -96,6 +97,7 @@ type options struct {
 	input     *Input
 	repeat    eraseRepeat
 	write     InputWriter
+	onAction  func(FieldAction)
 	animation time.Duration
 }
 
@@ -146,7 +148,8 @@ func New(layout Layout, opts ...Option) (*Keyboard, error) {
 
 	k := &Keyboard{
 		pointers: o.pointers, input: o.input, write: o.write, updated: never,
-		layers: layers, landed: make(map[PointerID]landing), repeat: o.repeat,
+		onAction: o.onAction,
+		layers:   layers, landed: make(map[PointerID]landing), repeat: o.repeat,
 		animation: animation{duration: o.animation, ticks: 1, step: 1, target: 1},
 	}
 	k.place()
@@ -277,6 +280,7 @@ func (k *Keyboard) Update() {
 	k.repeatErase()
 	k.animation.advance()
 	k.deliver()
+	k.dispatchActions()
 }
 
 func (k *Keyboard) deliver() {

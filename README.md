@@ -77,7 +77,16 @@ Use `osk.StockWithAction(osk.EsES, osk.Full, osk.ActionNext)` to label the actio
 key «Siguiente». Enter, Next, Done, Go, Search, and Send all press `ebiten.KeyEnter`
 and emit `osk.ActionPressed`. Read `event.FieldAction` from `Keyboard.AppendEvents`
 to handle the selected action. Custom layouts can use `osk.Shift()` and
-`osk.Submit(...)` for these keys.
+`osk.Submit(...)` for these keys. Set a custom action key's `Label` to give it
+your own text.
+
+Pass `osk.WithActionHandler(func(action osk.FieldAction) { ... })` to `osk.New`
+to receive each on-screen action directly. The handler runs at the end of
+`Keyboard.Update` and can change the layout or hide the keyboard. The same
+activation still reports an event and presses Enter. If your form also reads
+Enter through the input copy or hook, handle that Enter only when the callback
+hasn't supplied an action for the update. Physical Enter continues to come
+through the input API.
 
 ### Field kinds
 
