@@ -78,6 +78,8 @@ func TestFullLayersTypeAndReturnToLetters(t *testing.T) {
 	for _, test := range []struct {
 		locale                     osk.Locale
 		letters, symbols           []string
+		accents                    []string
+		accentLabel                string
 		shift, erase, space, enter string
 		positions                  map[rune]ebiten.Key
 	}{
@@ -94,6 +96,7 @@ func TestFullLayersTypeAndReturnToLetters(t *testing.T) {
 		},
 		{
 			locale: osk.EsES, letters: []string{"qwertyuiop", "asdfghjklñ", "zxcvbnm"},
+			accents: []string{"áéí", "óú", "üç"}, accentLabel: "ÁÉÍ",
 			symbols: []string{"1234567890", ",-_'¿?¡!@+", "`´:;()/º<"},
 			shift:   "Mayús", erase: "Borrar", space: "Espacio", enter: "Intro",
 			positions: map[rune]ebiten.Key{
@@ -104,14 +107,30 @@ func TestFullLayersTypeAndReturnToLetters(t *testing.T) {
 				',': ebiten.KeyComma, '.': ebiten.KeyPeriod, '-': ebiten.KeySlash,
 			},
 		},
+		{
+			locale: "en-GB", letters: []string{"qwertyuiop", "asdfghjkl", "zxcvbnm"},
+			symbols: []string{"1234567890", ",-_'?!@:/&£", "`=[]\\;()\"#"},
+			shift:   "Shift", erase: "Backspace", space: "Space", enter: "Return", positions: britishPositions,
+		},
+		{
+			locale: "de-DE", letters: []string{"qwertzuiopü", "asdfghjklöä", "yxcvbnmß"},
+			symbols: []string{"1234567890", ",-_'?!@:/&", "+#<>;()\"="},
+			shift:   "Umschalt", erase: "Löschen", space: "Leerzeichen", enter: "Eingabe", positions: germanPositions,
+		},
+		{
+			locale: "it-IT", letters: []string{"qwertyuiop", "asdfghjkl", "zxcvbnm"},
+			symbols: []string{"1234567890", ",-_'?!@:/&", "\\+<>;()\"£"},
+			accents: []string{"àèé", "ìò", "ù"}, accentLabel: "ÀÈÉ",
+			shift: "Maiusc", erase: "Cancella", space: "Spazio", enter: "Invio", positions: italianPositions,
+		},
 	} {
 		t.Run(string(test.locale), func(t *testing.T) {
 			b := fullBoard(t, test.locale)
 			b.SetRect(image.Rect(7, 3, 1004, 398))
 			home := b.key(t, "123").Rect
 			bottom := []string{"123", test.space, ".", test.enter}
-			if test.locale == osk.EsES {
-				bottom = slices.Insert(bottom, 1, "ÁÉÍ")
+			if test.accentLabel != "" {
+				bottom = slices.Insert(bottom, 1, test.accentLabel)
 			}
 			checkFullLayer(t, b, fullRows(test.letters, bottom, test.shift, test.erase), test.space, test.erase, test.positions)
 
@@ -119,15 +138,16 @@ func TestFullLayersTypeAndReturnToLetters(t *testing.T) {
 			bottom[0] = "ABC"
 			checkFullLayer(t, b, fullRows(test.symbols, bottom, "", test.erase), test.space, test.erase, test.positions)
 			checkFullReturn(t, b, home, "q")
-			if test.locale == osk.EsES {
-				switchLayer(t, b, "ÁÉÍ")
+			if test.accentLabel != "" {
+				switchLayer(t, b, test.accentLabel)
 				bottom[1] = "123"
-				checkFullLayer(t, b, fullRows([]string{"áéí", "óú", "üç"}, bottom, test.shift, test.erase), test.space, test.erase, test.positions)
+				checkFullLayer(t, b, fullRows(test.accents, bottom, test.shift, test.erase), test.space, test.erase, test.positions)
 				for range 2 {
 					b.tap(t, 1, test.shift)
 					b.Update()
 				}
-				checkFullLayer(t, b, fullRows([]string{"ÁÉÍ", "ÓÚ", "ÜÇ"}, bottom, test.shift, test.erase), test.space, test.erase, test.positions)
+				capitals := []string{strings.ToUpper(test.accents[0]), strings.ToUpper(test.accents[1]), strings.ToUpper(test.accents[2])}
+				checkFullLayer(t, b, fullRows(capitals, bottom, test.shift, test.erase), test.space, test.erase, test.positions)
 				checkFullReturn(t, b, home, "Q") // Caps lock persists across layers.
 			}
 		})
@@ -217,17 +237,19 @@ func TestUnknownFieldActionsAreRejected(t *testing.T) {
 
 func TestFullActionLabelsAndEvents(t *testing.T) {
 	for _, test := range []struct {
-		action osk.FieldAction
-		en, es string
+		action             osk.FieldAction
+		en, es, gb, de, it string
 	}{
-		{osk.ActionEnter, "Enter", "Intro"},
-		{osk.ActionNext, "Next", "Siguiente"},
-		{osk.ActionDone, "Done", "Listo"},
-		{osk.ActionGo, "Go", "Ir"},
-		{osk.ActionSearch, "Search", "Buscar"},
-		{osk.ActionSend, "Send", "Enviar"},
+		{osk.ActionEnter, "Enter", "Intro", "Return", "Eingabe", "Invio"},
+		{osk.ActionNext, "Next", "Siguiente", "Next", "Weiter", "Avanti"},
+		{osk.ActionDone, "Done", "Listo", "Done", "Fertig", "Fine"},
+		{osk.ActionGo, "Go", "Ir", "Go", "Los", "Vai"},
+		{osk.ActionSearch, "Search", "Buscar", "Search", "Suchen", "Cerca"},
+		{osk.ActionSend, "Send", "Enviar", "Send", "Senden", "Invia"},
 	} {
-		for locale, label := range map[osk.Locale]string{osk.EnUS: test.en, osk.EsES: test.es} {
+		for locale, label := range map[osk.Locale]string{
+			osk.EnUS: test.en, osk.EsES: test.es, "en-GB": test.gb, "de-DE": test.de, "it-IT": test.it,
+		} {
 			t.Run(string(locale)+"/"+label, func(t *testing.T) {
 				layout, err := osk.StockWithAction(locale, osk.Full, test.action)
 				if err != nil {

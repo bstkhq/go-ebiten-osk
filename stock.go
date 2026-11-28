@@ -3,9 +3,15 @@ package osk
 import (
 	"fmt"
 	"maps"
+	"slices"
 
 	"github.com/hajimehoshi/ebiten/v2"
 )
+
+// StockLocales lists the available locales in ascending order by tag.
+func StockLocales() []Locale {
+	return slices.Sorted(maps.Keys(stock))
+}
 
 // Stock is the layout the library ships for a locale in a form.
 func Stock(locale Locale, form Form) (Layout, error) {
@@ -49,6 +55,9 @@ var stock = map[Locale]struct {
 	CaES: {compactCaES, fullCaES},
 	EnUS: {compactEnUS, fullEnUS},
 	EsES: {compactEsES, fullEsES},
+	EnGB: {compactEnGB, fullEnGB},
+	DeDE: {compactDeDE, fullDeDE},
+	ItIT: {compactItIT, fullItIT},
 }
 
 const (
