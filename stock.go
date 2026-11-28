@@ -2,6 +2,7 @@ package osk
 
 import (
 	"fmt"
+	"maps"
 
 	"github.com/hajimehoshi/ebiten/v2"
 )
@@ -43,6 +44,9 @@ var stock = map[Locale]struct {
 	compact func() Layout
 	full    func(Kind, FieldAction) Layout
 }{
+	FrFR: {compactFrFR, fullFrFR},
+	PtPT: {compactPtPT, fullPtPT},
+	CaES: {compactCaES, fullCaES},
 	EnUS: {compactEnUS, fullEnUS},
 	EsES: {compactEsES, fullEsES},
 }
@@ -51,6 +55,8 @@ const (
 	letters = "letters"
 	digits  = "digits"
 	accents = "accents"
+
+	stockRowWidth = 10
 )
 
 func compactEnUS() Layout {
@@ -91,7 +97,8 @@ func compactEsES() Layout {
 // compactLayer puts the controls under three rows of characters.
 func compactLayer(name string, rows [3]string, controls ...Key) Layer {
 	return Layer{Name: name, Rows: [][]Key{
-		characters(rows[0]), characters(rows[1]), characters(rows[2]), controls,
+		characters(rows[0], stockRowWidth), characters(rows[1], stockRowWidth),
+		characters(rows[2], stockRowWidth), controls,
 	}}
 }
 
@@ -99,12 +106,19 @@ func layerSwitch(name, label string) Key {
 	return Key{Do: SwitchLayer(name), Label: label, Weight: 2}
 }
 
-// characters is a row of keys that each type one of the characters, in their order.
-func characters(row string) []Key {
+// characters shares the available width equally when a stock row has more
+// characters than can fit at full width.
+func characters(row string, width float64) []Key {
 	keys := make([]Key, 0, len(row))
 
 	for _, character := range row {
 		keys = append(keys, Key{Do: Type(string(character))})
+	}
+
+	if float64(len(keys)) > width {
+		for i := range keys {
+			keys[i].Weight = width / float64(len(keys))
+		}
 	}
 
 	return keys
@@ -138,7 +152,9 @@ func positionsEsES() Positions {
 	})
 }
 
-func withLettersAndDigits(positions Positions) Positions {
+func withLettersAndDigits(base Positions) Positions {
+	positions := make(Positions, len(base)+52+10)
+	maps.Copy(positions, base)
 	for letter := 'a'; letter <= 'z'; letter++ {
 		key := ebiten.KeyA + ebiten.Key(letter-'a')
 		positions[letter] = key

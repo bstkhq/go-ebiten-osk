@@ -88,6 +88,11 @@ period on the same row. Compact email uses the compact text layout.
 `osk.KindNumber` gives both forms a localized pad with ten digits, erase, and
 the selected field action. Digits report the physical digit positions.
 
+French (`osk.FrFR`, traditional AZERTY), Portuguese (`osk.PtPT`), and Catalan
+(`osk.CaES`) support both forms and all field kinds. Each has its own
+localized controls, field actions and accents layer. Shift also changes case
+on their full accents layers.
+
 ## Customize the keyboard
 
 Copy the default theme and change the fields you need. Sizes are fractions of a row's height.
