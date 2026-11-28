@@ -38,7 +38,7 @@ func TestTheExampleTypesItsLineFromTheScreenAndFromTheKeyboard(t *testing.T) {
 	d.Tap(ebiten.KeyBackspace)
 
 	d.WithGame(func(g ebiten.Game) {
-		if got := string(g.(*game).line); got != "Qa" {
+		if got := string(g.(*game).values[0]); got != "Qa" {
 			t.Errorf("Q on the screen, a on the keyboard, Q again and a backspace left the line %q, want Qa", got)
 		}
 	})
@@ -46,6 +46,25 @@ func TestTheExampleTypesItsLineFromTheScreenAndFromTheKeyboard(t *testing.T) {
 	if got := inked(d.Screenshot()); got <= caret {
 		t.Errorf("the typed line is drawn with %d pixels of ink, no more than the %d of the caret alone", got, caret)
 	}
+}
+
+func TestTheExampleOpensTheKeysForEachField(t *testing.T) {
+	d := ebitenmcp.T(t)
+	d.Click(48, boardTop+37) // Q in Name.
+	d.Click(width/2, boardTop/2)
+	d.Click(48, boardTop+37) // q in Email, with the full layout active.
+	d.Click(240, height-37)  // @ beside space.
+	d.Click(width*5/6, boardTop/2)
+	d.Click(width/6, boardTop+37) // 1 on the number pad.
+	d.Click(width/2, boardTop+37) // 2 beside it.
+	d.Click(width/6, height-37)   // erase on the number pad.
+	d.WithGame(func(g ebiten.Game) {
+		for index, want := range []string{"Q", "q@", "1"} {
+			if got := string(g.(*game).values[index]); got != want {
+				t.Errorf("%s contains %q, want %q", fields[index].label, got, want)
+			}
+		}
+	})
 }
 
 func TestTheExampleDrawsACharacterItsFontLacks(t *testing.T) {
@@ -58,7 +77,7 @@ func TestTheExampleDrawsACharacterItsFontLacks(t *testing.T) {
 	d.Tick(3)
 
 	d.WithGame(func(g ebiten.Game) {
-		if got := string(g.(*game).line); got != "א" {
+		if got := string(g.(*game).values[0]); got != "א" {
 			t.Errorf("a letter the font lacks left the line %q, want the letter kept", got)
 		}
 	})
@@ -66,6 +85,31 @@ func TestTheExampleDrawsACharacterItsFontLacks(t *testing.T) {
 	if inked(d.Screenshot()) == 0 {
 		t.Error("with a letter the font lacks in its line, the example draws nothing")
 	}
+}
+
+func TestTheExampleAcceptsATouchOnAFieldAndNextOnTheKeyboard(t *testing.T) {
+	d := ebitenmcp.T(t)
+	injector := d.Runtime().Injector()
+	injector.SetTouches([]ebitenmcp.Touch{
+		{ID: 1, X: 24, Y: 200},                 // Outside any field.
+		{ID: 2, X: width / 2, Y: boardTop / 2}, // Email.
+	})
+	d.Tick(2)
+	injector.SetTouches(nil)
+	d.Tick(2)
+
+	d.Click(48, boardTop+37)      // q on the full email keyboard.
+	d.Click(width-48, height-37)  // Next brings up the number pad.
+	d.Click(width/6, boardTop+37) // 1 on the number pad.
+	d.Click(width*5/6, height-37) // Done leaves the number field selected.
+	d.Click(width/2, boardTop+37) // 2 on the number pad.
+	d.WithGame(func(g ebiten.Game) {
+		for index, want := range []string{"", "q", "12"} {
+			if got := string(g.(*game).values[index]); got != want {
+				t.Errorf("%s contains %q, want %q", fields[index].label, got, want)
+			}
+		}
+	})
 }
 
 func TestTheExampleSwitchesThemesAndTypesWithItsOwnPainter(t *testing.T) {
@@ -81,7 +125,7 @@ func TestTheExampleSwitchesThemesAndTypesWithItsOwnPainter(t *testing.T) {
 		}
 	}
 	d.WithGame(func(g ebiten.Game) {
-		if got := string(g.(*game).line); got != "Q" {
+		if got := string(g.(*game).values[0]); got != "Q" {
 			t.Errorf("the custom painter's board typed %q, want Q", got)
 		}
 	})

@@ -38,6 +38,8 @@ go run github.com/bstkhq/go-ebiten-osk/examples/typing@latest
 ```
 
 Press F2 to cycle between the dark theme, the light theme, and the example's own painter.
+Select Name, Email, or Number to type into that field. Email opens the full
+email layout and Number opens the number pad.
 
 ## Layouts
 
@@ -67,6 +69,24 @@ key «Siguiente». Enter, Next, Done, Go, Search, and Send all press `ebiten.Key
 and emit `osk.ActionPressed`. Read `event.FieldAction` from `Keyboard.AppendEvents`
 to handle the selected action. Custom layouts can use `osk.Shift()` and
 `osk.Submit(...)` for these keys.
+
+### Field kinds
+
+`osk.StockWithKind` selects the keys for a field:
+
+```go
+layout, err := osk.StockWithKind(osk.EnUS, osk.Full, osk.KindEmail, osk.ActionNext)
+if err != nil {
+	return err
+}
+return keyboard.SetLayout(layout)
+```
+
+`osk.KindText` gives the same layout as `osk.StockWithAction`. A full
+`osk.KindEmail` layout starts in lowercase with **@** beside Space and a
+period on the same row. Compact email uses the compact text layout.
+`osk.KindNumber` gives both forms a localized pad with ten digits, erase, and
+the selected field action. Digits report the physical digit positions.
 
 ## Customize the keyboard
 
@@ -137,11 +157,11 @@ go run github.com/bstkhq/go-ebiten-osk/examples/typing@latest -hook
 
 Early. What works today:
 
-- compact and full en-US and es-ES boards, typed with fingers or the mouse;
+- compact and full en-US and es-ES boards for text, email, and numbers, typed with fingers or the mouse;
 - the input copy, alongside the physical keyboard;
 - the stock painter with dark and light themes.
 
-Planned, in the [issues](https://github.com/bstkhq/go-ebiten-osk/issues): email and number kinds, erase that repeats, and more locales.
+Planned, in the [issues](https://github.com/bstkhq/go-ebiten-osk/issues): erase that repeats and more locales.
 
 Built and tested against Ebitengine v2.9.9. The API will change until the first tagged version.
 
