@@ -41,6 +41,8 @@ type game struct {
 	text                     *etxt.Renderer
 	values                   [len(fields)][]rune
 	active                   int
+	actions                  []osk.FieldAction
+	submissions              int
 	locale                   osk.Locale
 	form                     osk.Form
 	preferredForm            osk.Form
@@ -50,23 +52,31 @@ type game struct {
 }
 
 func newGame(useHook bool) (*game, error) {
+	g := &game{}
+	if err := g.setup(useHook); err != nil {
+		return nil, err
+	}
+	return g, nil
+}
+
+func (g *game) setup(useHook bool) error {
 	input, err := newTypingInput(useHook)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	layout, err := osk.Stock(osk.EnUS, osk.Compact)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	keyboard, err := osk.New(layout, input.keyboardOptions()...)
+	keyboard, err := osk.New(layout, append(input.keyboardOptions(), osk.WithActionHandler(g.queueAction))...)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	keyboard.SetRect(image.Rect(0, boardTop, width, height))
 
-	return &game{
+	*g = game{
 		keyboard:      keyboard,
 		painter:       paint.New(paint.Dark()),
 		custom:        customPainter{text: newText(19)},
@@ -75,7 +85,8 @@ func newGame(useHook bool) (*game, error) {
 		preferredForm: osk.Compact,
 		input:         input,
 		visibility:    keyboardVisibility{shown: true, animated: true},
-	}, nil
+	}
+	return nil
 }
 
 func newText(size float64) *etxt.Renderer {
@@ -100,6 +111,7 @@ func (g *game) Update() error {
 		return err
 	}
 	g.visibility.update(g.keyboard)
+	g.actions = g.actions[:0]
 	g.keyboard.Update()
 	justPressed, appendChars := g.input.readers()
 
@@ -113,17 +125,12 @@ func (g *game) Update() error {
 	}
 	g.values[g.active] = appendChars(value)
 
-	if justPressed(ebiten.KeyEnter) {
-		return g.advanceField()
+	// Apply the action after editing the current field. The same on-screen
+	// press also appears as Enter in either input mode.
+	if len(g.actions) == 0 && justPressed(ebiten.KeyEnter) {
+		g.queueAction(fields[g.active].action)
 	}
-	return nil
-}
-
-func (g *game) advanceField() error {
-	if fields[g.active].action == osk.ActionNext && g.active+1 < len(fields) {
-		return g.focus(g.active + 1)
-	}
-	return nil
+	return g.handleActions()
 }
 
 func (g *game) cycleLook() {

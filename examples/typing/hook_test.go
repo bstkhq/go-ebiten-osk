@@ -10,13 +10,7 @@ import (
 )
 
 func TestTheExampleReadsAllThreeFieldsThroughTheHook(t *testing.T) {
-	d := ebitenmcp.T(t)
-	hooked, err := newGame(true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	d.WithGame(func(g ebiten.Game) { *g.(*game) = *hooked })
-	d.Tick(2)
+	d := hookedExample(t)
 
 	d.Click(48, boardTop+37)     // Q in Name.
 	d.Click(width/2, boardTop/2) // Focus Email.
@@ -34,4 +28,20 @@ func TestTheExampleReadsAllThreeFieldsThroughTheHook(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestTheExampleAdvancesAndSubmitsThroughTheHook(t *testing.T) {
+	checkFormActions(t, hookedExample(t))
+}
+
+func hookedExample(t *testing.T) *ebitenmcp.Driver {
+	t.Helper()
+	d := ebitenmcp.T(t)
+	var err error
+	d.WithGame(func(g ebiten.Game) { err = g.(*game).setup(true) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.Tick(2)
+	return d
 }

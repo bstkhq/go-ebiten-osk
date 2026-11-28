@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"image"
 	"image/color"
 	"slices"
@@ -62,6 +63,31 @@ func (g *game) focus(index int) error {
 	return g.showStock(g.locale, form, index)
 }
 
+func (g *game) queueAction(action osk.FieldAction) {
+	g.actions = append(g.actions, action)
+}
+
+func (g *game) handleActions() error {
+	for _, action := range g.actions {
+		if err := g.handleAction(action); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (g *game) handleAction(action osk.FieldAction) error {
+	switch action {
+	case osk.ActionNext:
+		if g.active+1 < len(fields) {
+			return g.focus(g.active + 1)
+		}
+	case osk.ActionDone:
+		g.submissions++
+	}
+	return nil
+}
+
 func (g *game) drawFields(screen *ebiten.Image) {
 	g.text.SetAlign(etxt.Left | etxt.VertCenter)
 	for index, field := range fields {
@@ -77,4 +103,5 @@ func (g *game) drawFields(screen *ebiten.Image) {
 		fieldImage := screen.SubImage(rect.Inset(8)).(*ebiten.Image)
 		g.text.Draw(fieldImage, value, rect.Min.X+8, rect.Min.Y+rect.Dy()/2)
 	}
+	ebitenutil.DebugPrintAt(screen, fmt.Sprintf("Local submissions  %d", g.submissions), 16, 168)
 }

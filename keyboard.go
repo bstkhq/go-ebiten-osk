@@ -17,6 +17,7 @@ type Keyboard struct {
 	pointers  Pointers
 	input     *Input
 	write     InputWriter
+	onAction  func(FieldAction)
 
 	// updated is the tick of the last update. A keyboard listens for landings from one
 	// update to the next: a pointer it finds down after a tick without an update came down
@@ -38,6 +39,8 @@ type Keyboard struct {
 	// physical positions in it.
 	events  []Event
 	changes []change
+	// writerEvents keeps the writer's borrowed copy separate from events.
+	writerEvents []Event
 
 	// held counts the keys pressed at each physical position: two keys of a layer may stand
 	// for one position, which goes down with the first and up with the last.
@@ -96,6 +99,7 @@ type options struct {
 	input     *Input
 	repeat    eraseRepeat
 	write     InputWriter
+	onAction  func(FieldAction)
 	animation time.Duration
 }
 
@@ -111,8 +115,8 @@ func WithInput(input *Input) Option {
 	return func(o *options) { o.input = input }
 }
 
-// InputWriter receives a keyboard's held physical positions and events after
-// each update. The events are valid only for the duration of the call.
+// InputWriter receives a keyboard's held physical positions and a copy of its
+// events after each update. The copy is valid only for the duration of the call.
 type InputWriter func(held [ebiten.KeyMax + 1]bool, events []Event)
 
 // WithInputWriter sends a keyboard's updates to writer in place of the input
@@ -146,7 +150,8 @@ func New(layout Layout, opts ...Option) (*Keyboard, error) {
 
 	k := &Keyboard{
 		pointers: o.pointers, input: o.input, write: o.write, updated: never,
-		layers: layers, landed: make(map[PointerID]landing), repeat: o.repeat,
+		onAction: o.onAction,
+		layers:   layers, landed: make(map[PointerID]landing), repeat: o.repeat,
 		animation: animation{duration: o.animation, ticks: 1, step: 1, target: 1},
 	}
 	k.place()
@@ -277,6 +282,7 @@ func (k *Keyboard) Update() {
 	k.repeatErase()
 	k.animation.advance()
 	k.deliver()
+	k.dispatchActions()
 }
 
 func (k *Keyboard) deliver() {
@@ -288,7 +294,8 @@ func (k *Keyboard) deliver() {
 	for key, fingers := range k.held {
 		held[key] = fingers > 0
 	}
-	k.write(held, k.events)
+	k.writerEvents = append(k.writerEvents[:0], k.events...)
+	k.write(held, k.writerEvents)
 }
 
 // cancelLandings releases keys from the departing layer. A pointer that stays down
