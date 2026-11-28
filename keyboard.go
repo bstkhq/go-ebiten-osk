@@ -30,8 +30,10 @@ type Keyboard struct {
 	releaseHolds bool // The next update releases holds after Hide or SetLayout.
 
 	// landed records each pointer's ownership and the key it still holds, if any.
-	landed map[PointerID]landing
-	down   []Pointer
+	landed       map[PointerID]landing
+	down         []Pointer
+	variantHolds []*variantHold
+	picker       *variantHold
 
 	repeat eraseRepeat
 
@@ -48,9 +50,10 @@ type Keyboard struct {
 }
 
 type landing struct {
-	key    *keyState
-	taken  bool
-	lifted bool
+	key     *keyState
+	variant *variantHold
+	taken   bool
+	lifted  bool
 }
 
 // A change is what became of a physical position in one update of a keyboard: whether the
@@ -170,6 +173,7 @@ func (k *Keyboard) SetLayout(layout Layout) error {
 	}
 
 	k.layers, k.layer, k.shift = layers, 0, StateIdle
+	k.cancelVariants()
 	k.releaseHolds = true
 	k.place()
 	return nil
@@ -179,6 +183,9 @@ func (k *Keyboard) SetLayout(layout Layout) error {
 // height, and keys and reserved gaps use the same weight scale. A row lighter
 // than the heaviest is centered.
 func (k *Keyboard) SetRect(rect image.Rectangle) {
+	if k.rect != rect {
+		k.cancelVariants()
+	}
 	k.rect = rect
 	k.place()
 }
@@ -198,6 +205,7 @@ func (k *Keyboard) Show() {
 // Update, before that update advances the transition.
 func (k *Keyboard) Hide() {
 	k.animation.aim(false)
+	k.cancelVariants()
 	k.releaseHolds = true
 }
 
@@ -233,8 +241,8 @@ func (k *Keyboard) PointerTaken(id PointerID) bool {
 	return k.updated == k.input.tick() && k.landed[id].taken
 }
 
-// Update takes in the pointers of this tick. A pointer that lands on a key presses it, and
-// types its text, until that pointer lifts; where it moves in between changes nothing.
+// Update takes in the pointers of this tick. Ordinary keys act on contact. Stock letters
+// with variants act on release, allowing the pointer to hold and select a variant first.
 //
 // Call it once every tick, shown or hidden, before reading the input: an input answers for a
 // keyboard only in the ticks it was updated in. A keyboard listens for landings from one
@@ -256,14 +264,15 @@ func (k *Keyboard) Update() {
 
 	stock, _ := k.pointers.(*screen)
 	if stock != nil {
+		stock.continueVariants(k)
 		stock.adoptMouse(k, listening)
 	}
-	k.lift(listening)
-
 	if k.releaseHolds {
 		k.cancelLandings()
 		k.releaseHolds = false
 	}
+	k.advanceVariants(listening)
+	k.lift(listening)
 
 	if !listening {
 		// What it let go of was let go of while nobody was told: the game has seen
@@ -301,6 +310,7 @@ func (k *Keyboard) deliver() {
 // cancelLandings releases keys from the departing layer. A pointer that stays down
 // still belongs to its original landing and cannot press a key on the new layer.
 func (k *Keyboard) cancelLandings() {
+	k.cancelVariants()
 	for id, landed := range k.landed {
 		k.release(landed.key)
 		landed.key = nil
@@ -322,13 +332,18 @@ func (k *Keyboard) lift(listening bool) {
 
 // stayedDown says whether the pointer is down and has been since before this tick.
 func stayedDown(down []Pointer, id PointerID) bool {
+	pointer, found := findPointer(down, id)
+	return found && !pointer.Landed
+}
+
+func findPointer(down []Pointer, id PointerID) (Pointer, bool) {
 	for _, pointer := range down {
 		if pointer.ID == id {
-			return !pointer.Landed
+			return pointer, true
 		}
 	}
 
-	return false
+	return Pointer{}, false
 }
 
 // land presses the keys under the pointers that came down in this tick: those that say so,
@@ -351,11 +366,7 @@ func (k *Keyboard) land(listening bool) int {
 			}
 			landed.key = nil
 		} else {
-			k.press(key)
-			if landed.lifted {
-				k.release(key)
-				landed.key = nil
-			}
+			k.pressLanding(pointer, &landed)
 		}
 
 		k.landed[pointer.ID] = landed
@@ -376,6 +387,9 @@ func (k *Keyboard) take(pointer Pointer, listening bool) landing {
 }
 
 func (k *Keyboard) takeAt(at image.Point, lifted bool) landing {
+	if k.picker != nil && choiceAt(k.picker, at) != nil {
+		return landing{taken: true, lifted: lifted}
+	}
 	if !at.In(k.rect) {
 		return landing{lifted: lifted}
 	}

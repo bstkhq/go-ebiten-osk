@@ -12,8 +12,8 @@ import (
 
 type localeCase struct {
 	locale                      osk.Locale
-	letters, symbols, accents   []string
-	space, shift, erase, accent string
+	letters, symbols            []string
+	space, shift, erase, direct string
 	actions                     [osk.ActionSend + 1]string
 	positions                   map[rune]ebiten.Key
 }
@@ -22,8 +22,7 @@ var localeCases = []localeCase{
 	{
 		locale: "fr-FR", letters: []string{"azertyuiop", "qsdfghjklm", "wxcvbn"},
 		symbols: []string{"1234567890", ",-_'?!@:&\"", ";()=+*/$<"},
-		accents: []string{"éèêë", "àâç", "ùûîïôœ"},
-		space:   "Espace", shift: "Maj", erase: "Effacer", accent: "ÉÈÀ",
+		space:   "Espace", shift: "Maj", erase: "Effacer",
 		actions: [...]string{"Entrée", "Suivant", "Terminé", "Aller", "Rechercher", "Envoyer"},
 		positions: map[rune]ebiten.Key{
 			'a': ebiten.KeyQ, 'A': ebiten.KeyQ, 'z': ebiten.KeyW, 'Z': ebiten.KeyW,
@@ -42,8 +41,7 @@ var localeCases = []localeCase{
 	{
 		locale: "pt-PT", letters: []string{"qwertyuiop", "asdfghjklç", "zxcvbnm"},
 		symbols: []string{"1234567890", ",-_'?!@:/\"", ";+=\\()«»<"},
-		accents: []string{"áàâã", "éêí", "óôõú"},
-		space:   "Espaço", shift: "Maiús", erase: "Apagar", accent: "ÁÃÕ",
+		space:   "Espaço", shift: "Maiús", erase: "Apagar",
 		actions: [...]string{"Introduzir", "Seguinte", "Concluir", "Ir", "Pesquisar", "Enviar"},
 		positions: map[rune]ebiten.Key{
 			'ç': ebiten.KeySemicolon, 'Ç': ebiten.KeySemicolon,
@@ -55,8 +53,7 @@ var localeCases = []localeCase{
 	{
 		locale: "ca-ES", letters: []string{"qwertyuiop", "asdfghjklñç", "zxcvbnm"},
 		symbols: []string{"1234567890", ",-_'¿?¡!@+", "`´:;()/º<"},
-		accents: []string{"àèé", "íïòó", "úü·"},
-		space:   "Espai", shift: "Majús", erase: "Esborra", accent: "ÀÈÉ",
+		space:   "Espai", shift: "Majús", erase: "Esborra", direct: "·",
 		actions: [...]string{"Retorn", "Següent", "Fet", "Vés", "Cerca", "Envia"},
 		positions: map[rune]ebiten.Key{
 			'ñ': ebiten.KeySemicolon, 'Ñ': ebiten.KeySemicolon,
@@ -78,15 +75,11 @@ func TestAdditionalCompactLocaleLayers(t *testing.T) {
 				home := b.key(t, "123").Rect
 				controls := []string{locale.space, locale.erase}
 				letters := strings.ToUpper(strings.Join(locale.letters, ""))
-				checkLayer(t, b, letters, controls, []string{"123", locale.accent}, locale.positions)
+				checkLayer(t, b, letters+locale.direct, controls, []string{"123"}, locale.positions)
 				checkCompactLetterOrder(t, b, locale.letters)
 
 				switchLayer(t, b, "123")
-				checkLayer(t, b, strings.Join(locale.symbols, "")+".", controls, []string{"ABC", locale.accent}, locale.positions)
-				checkFullReturn(t, b, home, letters[:1])
-
-				switchLayer(t, b, locale.accent)
-				checkLayer(t, b, strings.ToUpper(strings.Join(locale.accents, "")), controls, []string{"ABC", "123"}, locale.positions)
+				checkLayer(t, b, strings.Join(locale.symbols, "")+".", controls, []string{"ABC"}, locale.positions)
 				checkFullReturn(t, b, home, letters[:1])
 			})
 		}
@@ -119,30 +112,24 @@ func TestAdditionalFullLocaleLayers(t *testing.T) {
 				b := newKindBoard(t, locale.locale, osk.Full, kind, osk.ActionEnter)
 				b.SetRect(image.Rect(7, 3, 1004, 398))
 				home := b.key(t, "123").Rect
-				bottom := []string{"123", locale.accent, locale.space, ".", locale.actions[osk.ActionEnter]}
 				context := ","
 				if kind == osk.KindEmail {
 					context = "@"
 				}
-				letters := slices.Insert(slices.Clone(bottom), 2, context)
+				letters := []string{"123", context, locale.space, ".", locale.actions[osk.ActionEnter]}
+				if locale.direct != "" {
+					letters = slices.Insert(letters, 1, locale.direct)
+				}
 				checkFullLayer(t, b, fullRows(locale.letters, letters, locale.shift, locale.erase), locale.space, locale.erase, locale.positions)
 
 				switchLayer(t, b, "123")
-				bottom[0] = "ABC"
+				bottom := []string{"ABC", locale.space, ".", locale.actions[osk.ActionEnter]}
 				checkFullLayer(t, b, fullSymbolRows(locale.symbols, bottom, "<", locale.erase), locale.space, locale.erase, locale.positions)
 				checkFullReturn(t, b, home, locale.letters[0][:1])
 
-				switchLayer(t, b, locale.accent)
-				bottom[1] = "123"
-				checkFullLayer(t, b, fullRows(locale.accents, bottom, locale.shift, locale.erase), locale.space, locale.erase, locale.positions)
 				for range 2 {
 					switchLayer(t, b, locale.shift)
 				}
-				capitals := []string{
-					strings.ToUpper(locale.accents[0]), strings.ToUpper(locale.accents[1]), strings.ToUpper(locale.accents[2]),
-				}
-				checkFullLayer(t, b, fullRows(capitals, bottom, locale.shift, locale.erase), locale.space, locale.erase, locale.positions)
-				checkFullReturn(t, b, home, strings.ToUpper(locale.letters[0][:1]))
 				checkFullLayer(t, b, fullRows([]string{
 					strings.ToUpper(locale.letters[0]), strings.ToUpper(locale.letters[1]), strings.ToUpper(locale.letters[2]),
 				}, letters, locale.shift, locale.erase), locale.space, locale.erase, locale.positions)

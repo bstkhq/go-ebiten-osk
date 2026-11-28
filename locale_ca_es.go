@@ -6,8 +6,8 @@ const CaES Locale = "ca-ES"
 var catalan = fullLocale{
 	letterRows:   [3]string{"qwertyuiop", "asdfghjklñç", "zxcvbnm"},
 	symbolRows:   [3]string{"1234567890", ",-_'¿?¡!@+", "`´:;()/º<"},
-	accentRows:   [3]string{"àèé", "íïòó", "úü·"},
-	accentLabel:  "ÀÈÉ",
+	variants:     map[rune]string{'a': "à", 'e': "èé", 'i': "íï", 'o': "òó", 'u': "úü"},
+	direct:       "·",
 	space:        "Espai",
 	shift:        "Majús",
 	erase:        "Esborra",

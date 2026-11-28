@@ -36,7 +36,7 @@ func TestCompactSpanishLettersMatchTheReviewedBoard(t *testing.T) {
 		face        string
 		left, right int
 	}{
-		{"123", 0, 200}, {"ÁÉÍ", 200, 400}, {"Espacio", 400, 800}, {"Borrar", 800, 1000},
+		{"123", 0, 200}, {"Espacio", 400, 800}, {"Borrar", 800, 1000},
 	}
 	for _, key := range controls {
 		want := image.Rect(key.left, 400, key.right, 500)
@@ -45,8 +45,8 @@ func TestCompactSpanishLettersMatchTheReviewedBoard(t *testing.T) {
 		}
 	}
 
-	if got := len(b.AppendKeys(nil)); got != 31 {
-		t.Errorf("the board has %d keys, want exactly 31", got)
+	if got := len(b.AppendKeys(nil)); got != 30 {
+		t.Errorf("the board has %d keys, want exactly 30", got)
 	}
 }
 
@@ -55,14 +55,11 @@ func TestCompactLayersTypeAndReturnToLetters(t *testing.T) {
 		locale               osk.Locale
 		space, erase         string
 		letters, punctuation string
-		auxiliary            []string
-		accentLabel, accents string
 		positions            map[rune]ebiten.Key
 	}{
 		{
 			locale: osk.EnUS, space: "Space", erase: "Delete",
 			letters: "QWERTYUIOPASDFGHJKLZXCVBNM", punctuation: ".,-_'?!@:/`=[]\\;()&\"",
-			auxiliary: []string{"123"},
 			positions: map[rune]ebiten.Key{
 				'.': ebiten.KeyPeriod, ',': ebiten.KeyComma, '-': ebiten.KeyMinus,
 				'\'': ebiten.KeyQuote, '/': ebiten.KeySlash, '`': ebiten.KeyBackquote,
@@ -73,8 +70,6 @@ func TestCompactLayersTypeAndReturnToLetters(t *testing.T) {
 		{
 			locale: osk.EsES, space: "Espacio", erase: "Borrar",
 			letters: "QWERTYUIOPASDFGHJKLÑZXCVBNM", punctuation: ".,-_'¿?¡!@`+´:;()/º<",
-			auxiliary:   []string{"123", "ÁÉÍ"},
-			accentLabel: "ÁÉÍ", accents: "ÁÉÍÓÚÜÇ",
 			positions: map[rune]ebiten.Key{
 				'Ñ': ebiten.KeySemicolon, 'Ç': ebiten.KeyBackslash, 'º': ebiten.KeyBackquote,
 				'<': ebiten.KeyIntlBackslash, '\'': ebiten.KeyMinus, '¡': ebiten.KeyEqual,
@@ -85,17 +80,17 @@ func TestCompactLayersTypeAndReturnToLetters(t *testing.T) {
 		{
 			locale: "en-GB", space: "Space", erase: "Backspace",
 			letters: "QWERTYUIOPASDFGHJKLZXCVBNM", punctuation: ".,-_'?!@:/&£`=[]\\;()\"#",
-			auxiliary: []string{"123"}, positions: britishPositions,
+			positions: britishPositions,
 		},
 		{
 			locale: "de-DE", space: "Leerzeichen", erase: "Löschen",
 			letters: "QWERTZUIOPÜASDFGHJKLÖÄYXCVBNMß", punctuation: ".,-_'?!@:/&+#<>;()\"=",
-			auxiliary: []string{"123"}, positions: germanPositions,
+			positions: germanPositions,
 		},
 		{
 			locale: "it-IT", space: "Spazio", erase: "Cancella",
 			letters: "QWERTYUIOPASDFGHJKLZXCVBNM", punctuation: ".,-_'?!@:/&\\+<>;()\"£",
-			auxiliary: []string{"123", "ÀÈÉ"}, accentLabel: "ÀÈÉ", accents: "ÀÈÉÌÒÙ", positions: italianPositions,
+			positions: italianPositions,
 		},
 	} {
 		t.Run(string(test.locale), func(t *testing.T) {
@@ -103,27 +98,10 @@ func TestCompactLayersTypeAndReturnToLetters(t *testing.T) {
 			b.SetRect(image.Rect(7, 3, 1004, 398))
 			home := b.key(t, "123").Rect
 			controls := []string{test.space, test.erase}
-			checkLayer(t, b, test.letters, controls, test.auxiliary, test.positions)
-
-			for i, entry := range test.auxiliary {
-				t.Run(entry, func(t *testing.T) {
-					switchLayer(t, b, entry)
-					if got := b.key(t, "ABC").Rect; got != home {
-						t.Errorf("the way back to letters is at %v, want %v", got, home)
-					}
-					characters := "1234567890" + test.punctuation
-					if entry == test.accentLabel {
-						characters = test.accents
-					}
-					switches := slices.Clone(test.auxiliary)
-					switches[i] = "ABC"
-					checkLayer(t, b, characters, controls, switches, test.positions)
-					switchLayer(t, b, "ABC")
-					if got := b.key(t, "Q").Face(); got != "Q" {
-						t.Errorf("after returning to letters, the first key shows %q", got)
-					}
-				})
-			}
+			checkLayer(t, b, test.letters, controls, []string{"123"}, test.positions)
+			switchLayer(t, b, "123")
+			checkLayer(t, b, "1234567890"+test.punctuation, controls, []string{"ABC"}, test.positions)
+			checkFullReturn(t, b, home, "Q")
 		})
 	}
 }
@@ -228,8 +206,27 @@ func switchLayer(t *testing.T, b board, face string) {
 	}
 }
 
-func TestSwitchingLayersReleasesOldHoldsAndKeepsPointersDetached(t *testing.T) {
-	b := newBoard(t, stockBoard(t, osk.EsES))
+func TestSwitchingCustomLayersReleasesOldHoldsAndKeepsPointersDetached(t *testing.T) {
+	b := newBoard(t, osk.Layout{
+		Positions: osk.Positions{'Q': ebiten.KeyQ, '1': ebiten.KeyDigit1},
+		Layers: []osk.Layer{
+			{Name: "letters", Rows: [][]osk.Key{{
+				{Do: osk.Type("Q")},
+				{Do: osk.SwitchLayer("digits"), Label: "123"},
+				{Do: osk.SwitchLayer("accents"), Label: "ÁÉÍ"},
+			}}},
+			{Name: "digits", Rows: [][]osk.Key{{{Do: osk.Type("1")}}}},
+			{Name: "accents", Rows: [][]osk.Key{{{Do: osk.Type("Á")}, {Do: osk.SwitchLayer("letters"), Label: "ABC"}}}},
+		},
+	})
+	switchLayer(t, b, "ÁÉÍ")
+	b.touch(t, 2, "Á")
+	b.Update()
+	if b.typed() != "Á" || len(b.AppendVariants(nil)) != 0 {
+		t.Errorf("the custom accent key typed %q and offered %v", b.typed(), b.AppendVariants(nil))
+	}
+	b.lift(2)
+	switchLayer(t, b, "ABC")
 	b.touch(t, 1, "Q")
 	b.touch(t, 2, "Q")
 	b.Update()

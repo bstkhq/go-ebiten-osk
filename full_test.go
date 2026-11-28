@@ -79,8 +79,6 @@ func TestFullLayersTypeAndReturnToLetters(t *testing.T) {
 		locale                     osk.Locale
 		letters, symbols           []string
 		bottomSymbols              string
-		accents                    []string
-		accentLabel                string
 		shift, erase, space, enter string
 		positions                  map[rune]ebiten.Key
 	}{
@@ -99,9 +97,8 @@ func TestFullLayersTypeAndReturnToLetters(t *testing.T) {
 		{
 			locale: osk.EsES, letters: []string{"qwertyuiop", "asdfghjklñ", "zxcvbnm"},
 			bottomSymbols: "<",
-			accents:       []string{"áéí", "óú", "üç"}, accentLabel: "ÁÉÍ",
-			symbols: []string{"1234567890", ",-_'¿?¡!@+", "`´:;()/º<"},
-			shift:   "Mayús", erase: "Borrar", space: "Espacio", enter: "Intro",
+			symbols:       []string{"1234567890", ",-_'¿?¡!@+", "`´:;()/º<"},
+			shift:         "Mayús", erase: "Borrar", space: "Espacio", enter: "Intro",
 			positions: map[rune]ebiten.Key{
 				'ñ': ebiten.KeySemicolon, 'Ñ': ebiten.KeySemicolon,
 				'ç': ebiten.KeyBackslash, 'Ç': ebiten.KeyBackslash, 'º': ebiten.KeyBackquote,
@@ -125,37 +122,25 @@ func TestFullLayersTypeAndReturnToLetters(t *testing.T) {
 			locale: "it-IT", letters: []string{"qwertyuiop", "asdfghjkl", "zxcvbnm"},
 			bottomSymbols: "£",
 			symbols:       []string{"1234567890", ",-_'?!@:/&", "\\+<>;()\"£"},
-			accents:       []string{"àèé", "ìò", "ù"}, accentLabel: "ÀÈÉ",
-			shift: "Maiusc", erase: "Cancella", space: "Spazio", enter: "Invio", positions: italianPositions,
+			shift:         "Maiusc", erase: "Cancella", space: "Spazio", enter: "Invio", positions: italianPositions,
 		},
 	} {
 		t.Run(string(test.locale), func(t *testing.T) {
 			b := fullBoard(t, test.locale)
 			b.SetRect(image.Rect(7, 3, 1004, 398))
 			home := b.key(t, "123").Rect
-			bottom := []string{"123", test.space, ".", test.enter}
-			if test.accentLabel != "" {
-				bottom = slices.Insert(bottom, 1, test.accentLabel)
-			}
-			letterBottom := slices.Insert(slices.Clone(bottom), len(bottom)-3, ",")
-			checkFullLayer(t, b, fullRows(test.letters, letterBottom, test.shift, test.erase), test.space, test.erase, test.positions)
+			bottom := []string{"123", ",", test.space, ".", test.enter}
+			checkFullLayer(t, b, fullRows(test.letters, bottom, test.shift, test.erase), test.space, test.erase, test.positions)
 
 			switchLayer(t, b, "123")
-			bottom[0] = "ABC"
+			bottom = []string{"ABC", test.space, ".", test.enter}
 			checkFullLayer(t, b, fullSymbolRows(test.symbols, bottom, test.bottomSymbols, test.erase), test.space, test.erase, test.positions)
 			checkFullReturn(t, b, home, "q")
-			if test.accentLabel != "" {
-				switchLayer(t, b, test.accentLabel)
-				bottom[1] = "123"
-				checkFullLayer(t, b, fullRows(test.accents, bottom, test.shift, test.erase), test.space, test.erase, test.positions)
-				for range 2 {
-					b.tap(t, 1, test.shift)
-					b.Update()
-				}
-				capitals := []string{strings.ToUpper(test.accents[0]), strings.ToUpper(test.accents[1]), strings.ToUpper(test.accents[2])}
-				checkFullLayer(t, b, fullRows(capitals, bottom, test.shift, test.erase), test.space, test.erase, test.positions)
-				checkFullReturn(t, b, home, "Q") // Caps lock persists across layers.
+			for range 2 {
+				switchLayer(t, b, test.shift)
 			}
+			switchLayer(t, b, "123")
+			checkFullReturn(t, b, home, "Q")
 		})
 	}
 }

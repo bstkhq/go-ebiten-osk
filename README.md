@@ -50,11 +50,16 @@ F4 shows a PIN pad built from the exported layout blocks.
 `osk.StockLocales` lists the available locales. `osk.Stock` looks up a layout by
 locale and form. Compact `osk.EnUS` and `osk.EsES`
 both have uppercase letters, a `123` layer with digits and punctuation, and an
-`ABC` switch back to letters. Spanish also has an `ÁÉÍ` layer.
+`ABC` switch back to letters.
+
+Spanish, French, Portuguese, Catalan, and Italian offer their accented
+letters in a picker. Tap for the base letter, or hold for about half a
+second, slide to the variant, and release. Release outside the picker to
+cancel. Catalan middle dot (·) has its own key on the letters layer.
 
 British English (`osk.EnGB`) includes £ on its symbols layer. German
 (`osk.DeDE`) puts Ä, Ö, Ü and ß on its QWERTZ letters layer. Italian
-(`osk.ItIT`) has QWERTY letters and an `ÀÈÉ` accents layer. Compact
+(`osk.ItIT`) has QWERTY letters. Compact
 Italian shows capitals, and full Italian switches case with Shift.
 
 The locale tables are written by hand. Physical positions were checked against
@@ -71,7 +76,7 @@ space before, between, or after a row's keys in the same units as their weights.
 
 Ask `osk.Stock` for `osk.Full` to start with lowercase letters and a return (↵)
 key. Tap Shift once for one capital, twice for caps lock, and a third time
-to unlock. Spanish supports both cases on the accents layer. The `123` layer
+to unlock. The variant picker follows Shift and caps lock. The `123` layer
 has digits and symbols.
 
 Use `osk.StockWithAction(osk.EsES, osk.Full, osk.ActionNext)` to label the action
@@ -117,10 +122,13 @@ the selected field action. Digits report the physical digit positions.
 
 French (`osk.FrFR`, traditional AZERTY), Portuguese (`osk.PtPT`), and Catalan
 (`osk.CaES`) support both forms and all field kinds. Each has its own
-localized controls, field actions and accents layer. Shift also changes case
-on their full accents layers.
+localized controls and field actions.
 
 ## Customize the keyboard
+
+Custom painters can draw the picker above the visible layer using
+`Keyboard.AppendVariants`. The returned key rectangles can extend above the
+keyboard rectangle, so draw them after the board without clipping to the board.
 
 Copy the default theme and change the fields you need. Sizes are fractions of a row's height.
 

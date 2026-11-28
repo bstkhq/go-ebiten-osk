@@ -3,16 +3,18 @@ package osk
 import (
 	"slices"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
 const fullControlWidth = 1.5
 
 type fullLocale struct {
-	letterRows, symbolRows, accentRows [3]string
-	space, shift, erase                string
-	accentLabel                        string
-	actionLabels                       [ActionSend + 1]string
+	letterRows, symbolRows [3]string
+	space, shift, erase    string
+	variants               map[rune]string
+	direct                 string
+	actionLabels           [ActionSend + 1]string
 }
 
 func fullEnUS(kind Kind, action FieldAction) Layout {
@@ -26,17 +28,18 @@ func fullEnUS(kind Kind, action FieldAction) Layout {
 	}.layout(positionsEnUS(), kind, action)
 }
 
+var spanish = fullLocale{
+	letterRows:   [3]string{"qwertyuiop", "asdfghjklñ", "zxcvbnm"},
+	symbolRows:   [3]string{"1234567890", ",-_'¿?¡!@+", "`´:;()/º<"},
+	variants:     map[rune]string{'a': "á", 'e': "é", 'i': "í", 'o': "ó", 'u': "úü", 'c': "ç"},
+	space:        "Espacio",
+	shift:        "Mayús",
+	erase:        "Borrar",
+	actionLabels: [...]string{"Intro", "Siguiente", "Listo", "Ir", "Buscar", "Enviar"},
+}
+
 func fullEsES(kind Kind, action FieldAction) Layout {
-	return fullLocale{
-		letterRows:   [3]string{"qwertyuiop", "asdfghjklñ", "zxcvbnm"},
-		symbolRows:   [3]string{"1234567890", ",-_'¿?¡!@+", "`´:;()/º<"},
-		accentRows:   [3]string{"áéí", "óú", "üç"},
-		accentLabel:  "ÁÉÍ",
-		space:        "Espacio",
-		shift:        "Mayús",
-		erase:        "Borrar",
-		actionLabels: [...]string{"Intro", "Siguiente", "Listo", "Ir", "Buscar", "Enviar"},
-	}.layout(positionsEsES(), kind, action)
+	return spanish.layout(positionsEsES(), kind, action)
 }
 
 func (locale fullLocale) layout(positions Positions, kind Kind, action FieldAction) Layout {
@@ -56,14 +59,7 @@ func (locale fullLocale) fullLayers(kind Kind, erase, submit Key) []Layer {
 	tail := []Key{{Do: Type(" "), Label: locale.space, Weight: 4}, {Do: Type(".")}, submit}
 	toLetters, toDigits := layerSwitch(letters, "ABC"), layerSwitch(digits, "123")
 	toLetters.Weight, toDigits.Weight = fullControlWidth, fullControlWidth
-	letterControls, symbolControls := []Key{toDigits}, []Key{toLetters}
-	withAccents := locale.accentRows[0] != ""
-	if withAccents {
-		toAccents := layerSwitch(accents, locale.accentLabel)
-		toAccents.Weight = 1
-		letterControls = append(letterControls, toAccents)
-		symbolControls = append(symbolControls, toAccents)
-	}
+	letterControls := append([]Key{toDigits}, characters(locale.direct, 1)...)
 	context := ","
 	if kind == KindEmail {
 		context = "@"
@@ -73,44 +69,64 @@ func (locale fullLocale) fullLayers(kind Kind, erase, submit Key) []Layer {
 	grid := locale.grid()
 	letterBottom := grid.row(letterControls, nil, letterTail)
 	symbolRows, extra := grid.splitSymbols(locale.symbolRows)
-	symbolBottom := grid.row(symbolControls, nil, append(extra, tail...))
+	symbolBottom := grid.row([]Key{toLetters}, nil, append(extra, tail...))
 	layers := []Layer{
 		grid.layer(letters, locale.letterRows, letterBottom, []Key{shift}, erase),
 		grid.layer(digits, symbolRows, symbolBottom, nil, erase),
 	}
-	if withAccents {
-		accentBottom := grid.row([]Key{toLetters, toDigits}, nil, tail)
-		layers = append(layers, grid.layer(accents, locale.accentRows, accentBottom, []Key{shift}, erase))
-	}
+	locale.addVariants(layers[0])
 	return layers
 }
 
 func (locale fullLocale) compact(positions Positions) Layout {
-	space := Key{Do: Type(" "), Label: locale.space, Weight: 5}
-	erase := Key{Do: Erase(), Label: locale.erase, Weight: 3}
-	toLetters, toDigits := layerSwitch(letters, "ABC"), layerSwitch(digits, "123")
-	var accentsControl []Key
-	withAccents := locale.accentRows[0] != ""
-	if withAccents {
-		toAccents := layerSwitch(accents, locale.accentLabel)
-		space.Weight -= toAccents.weight()
-		accentsControl = []Key{toAccents}
+	spaceWidth := 5.0
+	if len(locale.variants) > 0 {
+		spaceWidth = 3
 	}
-	letterControls := append(append([]Key{toDigits}, accentsControl...), space, erase)
-	symbolControls := append(append([]Key{toLetters}, accentsControl...), space, erase)
+	return locale.compactWithWidths(positions, spaceWidth, 3)
+}
+
+func (locale fullLocale) compactWithWidths(positions Positions, spaceWidth, eraseWidth float64) Layout {
+	space := Key{Do: Type(" "), Label: locale.space, Weight: spaceWidth}
+	erase := Key{Do: Erase(), Label: locale.erase, Weight: eraseWidth}
+	toLetters, toDigits := layerSwitch(letters, "ABC"), layerSwitch(digits, "123")
+	direct := characters(locale.direct, 1)
+	letterControls := append([]Key{toDigits}, direct...)
 	locale.symbolRows[1] = "." + locale.symbolRows[1]
 	for row := range locale.letterRows {
 		locale.letterRows[row] = strings.ToUpper(locale.letterRows[row])
-		locale.accentRows[row] = strings.ToUpper(locale.accentRows[row])
 	}
 	layers := []Layer{
-		compactLayer(letters, locale.letterRows, letterControls...),
-		compactLayer(digits, locale.symbolRows, symbolControls...),
+		compactLayer(letters, locale.letterRows, append(letterControls, space, erase)...),
+		compactLayer(digits, locale.symbolRows, toLetters, space, erase),
 	}
-	if withAccents {
-		layers = append(layers, compactLayer(accents, locale.accentRows, toLetters, toDigits, space, erase))
+	if len(locale.variants) > 0 {
+		// Keep the former selector's width in the row. Catalan's middle
+		// dot takes one of those two slots on the letters layer.
+		layers[0].RowGaps = compactControlGap(len(letterControls), 2-float64(len(direct)))
+		layers[1].RowGaps = compactControlGap(1, 2)
 	}
+	locale.addVariants(layers[0])
 	return Layout{Layers: layers, Positions: positions}
+}
+
+func compactControlGap(beforeSpace int, width float64) [][]float64 {
+	gaps := make([]float64, beforeSpace+3)
+	gaps[beforeSpace] = width
+	return [][]float64{nil, nil, nil, gaps}
+}
+
+func (locale fullLocale) addVariants(layer Layer) {
+	for _, row := range layer.Rows[:3] {
+		for i := range row {
+			face, _ := utf8.DecodeRuneInString(row[i].Do.text)
+			variants := locale.variants[unicode.ToLower(face)]
+			if unicode.IsUpper(face) {
+				variants = strings.ToUpper(variants)
+			}
+			row[i].Do.variants = variants
+		}
+	}
 }
 
 func numberPad(positions Positions, erase, submit Key) Layout {

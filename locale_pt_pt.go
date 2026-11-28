@@ -8,8 +8,7 @@ const PtPT Locale = "pt-PT"
 var portuguese = fullLocale{
 	letterRows:   [3]string{"qwertyuiop", "asdfghjklç", "zxcvbnm"},
 	symbolRows:   [3]string{"1234567890", ",-_'?!@:/\"", ";+=\\()«»<"},
-	accentRows:   [3]string{"áàâã", "éêí", "óôõú"},
-	accentLabel:  "ÁÃÕ",
+	variants:     map[rune]string{'a': "áàâã", 'e': "éê", 'i': "í", 'o': "óôõ", 'u': "ú"},
 	space:        "Espaço",
 	shift:        "Maiús",
 	erase:        "Apagar",

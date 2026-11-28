@@ -36,7 +36,11 @@ func TestSpanishTextAndEmailFromTouch(t *testing.T) {
 
 	d.Tap(ebiten.KeyF1) // es-ES is next after en-US.
 	d.Tap(ebiten.KeyF3) // Full.
-	for _, face := range []string{"ÁÉÍ", "á", "ABC", ",", "Espacio"} {
+	base := keyCenter(t, d, "a", false)
+	inject.SetTouches([]ebitenmcp.Touch{{ID: 1, X: base.X, Y: base.Y}})
+	d.Tick(40)
+	touch(keyCenter(t, d, "á", true))
+	for _, face := range []string{",", "Espacio"} {
 		key(face)
 	}
 	email := fieldRect(1)
