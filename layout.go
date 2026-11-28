@@ -66,6 +66,10 @@ type Key struct {
 	// Label is what the key shows. A key with no label shows the text it types.
 	Label string
 
+	// Icon selects a shape to show in place of the label. The label remains
+	// available to painters that do not draw the icon.
+	Icon Icon
+
 	// Weight is the key's share of its row's width. Zero is one.
 	Weight float64
 }
@@ -89,9 +93,15 @@ const (
 	RoleSpace
 	// RoleControl is a key that acts on the text instead of adding to it.
 	RoleControl
+	// RoleLayerSwitch is a key that takes the keyboard to a layer.
+	RoleLayerSwitch
+	// RoleAction is a key that completes the current field.
+	RoleAction
 )
 
-func (r Role) String() string { return named("Role", int(r), "character", "space", "control") }
+func (r Role) String() string {
+	return named("Role", int(r), "character", "space", "control", "layer switch", "action")
+}
 
 // Role is what the key is for, told from what it does.
 func (k Key) Role() Role {

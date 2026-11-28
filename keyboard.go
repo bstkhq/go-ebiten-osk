@@ -80,9 +80,13 @@ const (
 	StateIdle State = iota
 	// StatePressed is a key under a finger or the mouse.
 	StatePressed
+	// StateLatched is a key active until its effect is used once.
+	StateLatched
+	// StateLocked is a key active until it is toggled off.
+	StateLocked
 )
 
-func (s State) String() string { return named("State", int(s), "idle", "pressed") }
+func (s State) String() string { return named("State", int(s), "idle", "pressed", "latched", "locked") }
 
 // An Option changes how a keyboard is made.
 type Option func(*options)

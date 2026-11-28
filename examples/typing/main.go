@@ -13,11 +13,10 @@ import (
 	"log"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/inpututil"
+	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/tinne26/etxt"
 
 	osk "github.com/bstkhq/go-ebiten-osk"
-	"github.com/bstkhq/go-ebiten-osk/hook"
 	"github.com/bstkhq/go-ebiten-osk/paint"
 )
 
@@ -37,13 +36,15 @@ var (
 type game struct {
 	keyboard *osk.Keyboard
 	painter  *paint.Painter
+	custom   customPainter
+	look     int
 	text     *etxt.Renderer
 	line     []rune
-	hook     *hook.Hook
+	input    typingInput
 }
 
 func newGame(useHook bool) (*game, error) {
-	h, err := selectHook(useHook)
+	input, err := newTypingInput(useHook)
 	if err != nil {
 		return nil, err
 	}
@@ -52,22 +53,26 @@ func newGame(useHook bool) (*game, error) {
 		return nil, err
 	}
 
-	var opts []osk.Option
-	if h != nil {
-		opts = append(opts, h.Option())
-	}
-	keyboard, err := osk.New(layout, opts...)
+	keyboard, err := osk.New(layout, input.keyboardOptions()...)
 	if err != nil {
 		return nil, err
 	}
 
 	keyboard.SetRect(image.Rect(0, boardTop, width, height))
 
-	theme := paint.Dark()
+	return &game{
+		keyboard: keyboard,
+		painter:  paint.New(paint.Dark()),
+		custom:   customPainter{text: newText(19)},
+		text:     newText(48),
+		input:    input,
+	}, nil
+}
 
+func newText(size float64) *etxt.Renderer {
 	text := etxt.NewRenderer()
-	text.SetFont(theme.Font)
-	text.SetSize(48)
+	text.SetFont(paint.Dark().Font)
+	text.SetSize(size)
 	text.SetColor(ink)
 	text.SetAlign(etxt.Center)
 
@@ -75,26 +80,17 @@ func newGame(useHook bool) (*game, error) {
 	// font's mark for a missing one, where etxt would otherwise panic.
 	text.Glyph().SetMissHandler(etxt.OnMissNotdef)
 
-	return &game{keyboard: keyboard, painter: paint.New(theme), text: text, hook: h}, nil
+	return text
 }
 
-func selectHook(enabled bool) (*hook.Hook, error) {
-	if enabled {
-		return hook.New()
-	}
-	return nil, nil
-}
-
-// Update reads the keyboard exactly as a game reads a physical one, with osk in the place of
-// ebiten and inpututil.
 func (g *game) Update() error {
 	g.keyboard.Update()
+	justPressed, appendChars := g.input.readers()
 
-	justPressed, appendChars := osk.IsKeyJustPressed, osk.AppendInputChars
-	if g.hook != nil {
-		g.hook.Update()
-		justPressed, appendChars = inpututil.IsKeyJustPressed, ebiten.AppendInputChars
+	if justPressed(ebiten.KeyF2) {
+		g.cycleLook()
 	}
+
 	if justPressed(ebiten.KeyBackspace) {
 		g.line = g.line[:max(len(g.line)-1, 0)]
 	}
@@ -104,9 +100,24 @@ func (g *game) Update() error {
 	return nil
 }
 
+func (g *game) cycleLook() {
+	g.look = (g.look + 1) % 3
+	switch g.look {
+	case 0:
+		g.painter.SetTheme(paint.Dark())
+	case 1:
+		g.painter.SetTheme(paint.Light())
+	}
+}
+
 func (g *game) Draw(screen *ebiten.Image) {
 	screen.Fill(background)
 	g.text.Draw(screen, string(g.line)+"_", width/2, boardTop/2)
+	ebitenutil.DebugPrintAt(screen, "F2  Keyboard appearance", 16, 16)
+	if g.look == 2 {
+		g.custom.Draw(screen, g.keyboard)
+		return
+	}
 	g.painter.Draw(screen, g.keyboard)
 }
 
@@ -127,7 +138,6 @@ func run(useHook bool) error {
 }
 
 func main() {
-	useHook := flag.Bool("hook", false, "read the on-screen keys through Ebitengine")
 	flag.Parse()
 	if err := run(*useHook); err != nil {
 		log.Fatal(err)
