@@ -139,6 +139,35 @@ can keep the mouse's choice when the reports straddle two keys. An independent
 mouse click in the same range and time window can look like an echo. Custom
 pointer sources handle duplicate reports themselves.
 
+## Optional Ebitengine hook
+
+Use `github.com/bstkhq/go-ebiten-osk/hook` for code that already reads
+`ebiten` and `inpututil` directly, such as a toolkit you cannot change.
+It writes keys and characters into Ebitengine's internal input snapshot.
+The hook targets Ebitengine 2.9.x releases and is tested against v2.9.9.
+Each engine minor version needs its own verification.
+
+During setup, call `hook.New()` and pass the resulting hook's `Option()` to
+`osk.New`. If `hook.New()` returns an error, omit that option to use the input
+copy. In the game's `Update`, update the hooked keyboards first, then call
+`h.Update()` before any keyboard reads or updates of keyboards that feed the
+input copy. Keep calling `h.Update()` each tick so that a keyboard you stop
+updating releases its keys. The input copy sees hooked keys and characters
+through Ebitengine, and `Keyboard.AppendEvents` is still available.
+
+A physically held key keeps its own Ebitengine state. A physical press that
+takes over an on-screen hold can report a new press and restart the duration.
+Use the input copy without the hook for a continuous hold across both sources.
+
+Importing the hook opts into linking its engine integration. With
+`-tags ebitenosk_nohook`, the package compiles without the internal symbols
+and `hook.New()` reports that the hook is disabled. Use this tag when building
+against an engine version that has removed one of those symbols.
+
+```sh
+go run github.com/bstkhq/go-ebiten-osk/examples/typing@latest -hook
+```
+
 ## State
 
 Early. What works today:
@@ -147,7 +176,7 @@ Early. What works today:
 - the input copy, alongside the physical keyboard;
 - the stock painter with dark and light themes.
 
-Planned, in the [issues](https://github.com/bstkhq/go-ebiten-osk/issues): email and number kinds, more locales, and an optional hook that makes Ebitengine's own functions report the on-screen keys, for code that cannot be changed.
+Planned, in the [issues](https://github.com/bstkhq/go-ebiten-osk/issues): email and number kinds, and more locales.
 
 Built and tested against Ebitengine v2.9.9. The API will change until the first tagged version.
 

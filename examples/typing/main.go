@@ -7,6 +7,7 @@
 package main
 
 import (
+	"flag"
 	"image"
 	"image/color"
 	"log"
@@ -39,15 +40,20 @@ type game struct {
 	look     int
 	text     *etxt.Renderer
 	line     []rune
+	input    typingInput
 }
 
-func newGame() (*game, error) {
+func newGame(useHook bool) (*game, error) {
+	input, err := newTypingInput(useHook)
+	if err != nil {
+		return nil, err
+	}
 	layout, err := osk.Stock(osk.EnUS, osk.Compact)
 	if err != nil {
 		return nil, err
 	}
 
-	keyboard, err := osk.New(layout)
+	keyboard, err := osk.New(layout, input.keyboardOptions()...)
 	if err != nil {
 		return nil, err
 	}
@@ -59,6 +65,7 @@ func newGame() (*game, error) {
 		painter:  paint.New(paint.Dark()),
 		custom:   customPainter{text: newText(19)},
 		text:     newText(48),
+		input:    input,
 	}, nil
 }
 
@@ -76,23 +83,22 @@ func newText(size float64) *etxt.Renderer {
 	return text
 }
 
-// Update reads the keyboard exactly as a game reads a physical one, with osk in the place of
-// ebiten and inpututil.
 func (g *game) Update() error {
 	if err := g.chooseLayout(); err != nil {
 		return err
 	}
 	g.keyboard.Update()
+	justPressed, appendChars := g.input.readers()
 
-	if osk.IsKeyJustPressed(ebiten.KeyF2) {
+	if justPressed(ebiten.KeyF2) {
 		g.cycleLook()
 	}
 
-	if osk.IsKeyJustPressed(ebiten.KeyBackspace) {
+	if justPressed(ebiten.KeyBackspace) {
 		g.line = g.line[:max(len(g.line)-1, 0)]
 	}
 
-	g.line = osk.AppendInputChars(g.line)
+	g.line = appendChars(g.line)
 
 	return nil
 }
@@ -123,8 +129,8 @@ func (g *game) Layout(int, int) (int, int) {
 	return width, height
 }
 
-func run() error {
-	g, err := newGame()
+func run(useHook bool) error {
+	g, err := newGame(useHook)
 	if err != nil {
 		return err
 	}
@@ -136,7 +142,8 @@ func run() error {
 }
 
 func main() {
-	if err := run(); err != nil {
+	flag.Parse()
+	if err := run(*useHook); err != nil {
 		log.Fatal(err)
 	}
 }
