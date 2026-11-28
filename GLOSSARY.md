@@ -32,7 +32,7 @@ One touch target of a layer. It types text, erases, or changes what the keyboard
 _Avoid_: button, cap
 
 **Role**:
-What a key is for, which decides how it is painted: a character, the space, a control or a layer switch.
+What a key is for. The roles are character, space, control, layer switch and action.
 _Avoid_: type, class
 
 **Kind**:
@@ -58,6 +58,14 @@ _Avoid_: injector, patch
 **Theme**:
 The values that give a keyboard its look: colours, sizes, fonts.
 _Avoid_: skin, style
+
+**Palette**
+
+The base colours of a theme, used to derive the colours of keys in each state.
+
+**Lip**
+
+The lower edge visible beneath a raised key.
 
 **Painter**:
 What draws a keyboard from its state and a theme.

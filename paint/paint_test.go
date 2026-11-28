@@ -98,30 +98,32 @@ func TestAPressedKeyLooksPressed(t *testing.T) {
 	d := ebitenmcp.T(t)
 
 	theme := paint.Dark()
+	idle := theme.Colors(osk.RoleCharacter, osk.StateIdle).Face
+	pressed := theme.Colors(osk.RoleCharacter, osk.StatePressed).Face
 	g, y := face(t, d, "G"), face(t, d, "Y")
 
 	d.Move(float64(g.X), float64(g.Y))
 
-	if got := colourAt(d.Screenshot(), g); got != theme.Key {
-		t.Fatalf("an idle key's face is %v, want the theme's %v", got, theme.Key)
+	if got := colourAt(d.Screenshot(), g); got != idle {
+		t.Fatalf("an idle key's face is %v, want the theme's %v", got, idle)
 	}
 
 	d.Runtime().Injector().MouseDown(ebiten.MouseButtonLeft)
 	d.Tick(2)
 
-	if got := colourAt(d.Screenshot(), g); got != theme.Pressed {
-		t.Errorf("a key under the mouse is %v, want the theme's pressed %v", got, theme.Pressed)
+	if got := colourAt(d.Screenshot(), g); got != pressed {
+		t.Errorf("a key under the mouse is %v, want the theme's pressed %v", got, pressed)
 	}
 
-	if got := colourAt(d.Screenshot(), y); got != theme.Key {
-		t.Errorf("a key nothing touches is %v while another is pressed, want %v", got, theme.Key)
+	if got := colourAt(d.Screenshot(), y); got != idle {
+		t.Errorf("a key nothing touches is %v while another is pressed, want %v", got, idle)
 	}
 
 	d.Runtime().Injector().MouseUp(ebiten.MouseButtonLeft)
 	d.Tick(2)
 
-	if got := colourAt(d.Screenshot(), g); got != theme.Key {
-		t.Errorf("a released key's face is %v, want %v again", got, theme.Key)
+	if got := colourAt(d.Screenshot(), g); got != idle {
+		t.Errorf("a released key's face is %v, want %v again", got, idle)
 	}
 }
 
@@ -129,21 +131,21 @@ func TestAPainterDrawsWhatItsThemeSays(t *testing.T) {
 	d := ebitenmcp.T(t)
 
 	theme := paint.Dark()
-	theme.Panel = color.RGBA{0x10, 0x40, 0x70, 0xff}
-	theme.Key = color.RGBA{0x70, 0x20, 0x20, 0xff}
+	theme.Palette.Panel = color.RGBA{0x10, 0x40, 0x70, 0xff}
+	theme.Palette.Key = color.RGBA{0x70, 0x20, 0x20, 0xff}
 
 	g := face(t, d, "G")
 
 	d.WithGame(func(game ebiten.Game) { game.(*board).painter = paint.New(theme) })
 	d.Tick(1)
 
-	if got := colourAt(d.Screenshot(), g); got != theme.Key {
-		t.Errorf("with the key's colour changed, a key's face is %v, want %v", got, theme.Key)
+	if got := colourAt(d.Screenshot(), g); got != theme.Palette.Key {
+		t.Errorf("with the key's colour changed, a key's face is %v, want %v", got, theme.Palette.Key)
 	}
 
 	// Beside the centred second row there is no key: only the panel.
-	if got := colourAt(d.Screenshot(), image.Pt(8, boardTop+90)); got != theme.Panel {
-		t.Errorf("with the panel's colour changed, the panel is %v, want %v", got, theme.Panel)
+	if got := colourAt(d.Screenshot(), image.Pt(8, boardTop+90)); got != theme.Palette.Panel {
+		t.Errorf("with the panel's colour changed, the panel is %v, want %v", got, theme.Palette.Panel)
 	}
 }
 
@@ -155,14 +157,13 @@ func TestALabelTooWideForItsKeyIsDrawnSmallerNotCut(t *testing.T) {
 		{Do: osk.Type("x"), Weight: 9},
 	}}}}}
 
-	setLayout(t, d, wide)
-	d.Tick(1)
+	drawLayout(t, d, wide)
 
 	// The first key is 64 pixels wide. Its label is the only light thing on it, and small
 	// letters are never quite the label's colour: none of that ink may reach the key's
 	// edges or the next key.
 	screen := d.Screenshot()
-	faceRed := paint.Dark().Key.R
+	faceRed := paint.Dark().Palette.Key.R
 
 	inked := 0
 
@@ -195,28 +196,17 @@ func TestALabelTheFontLacksIsDrawnWithoutStoppingTheGame(t *testing.T) {
 		{Do: osk.Type("x")},
 	}}}}}
 
-	setLayout(t, d, foreign)
+	drawLayout(t, d, foreign)
 
 	// The driver fails the test if the game panics while it draws these frames.
 	d.Tick(3)
 
-	if got := colourAt(d.Screenshot(), image.Pt(20, boardTop+120)); got != paint.Dark().Key {
-		t.Errorf("the key with a label the font lacks has a face of %v, want the theme's %v", got, paint.Dark().Key)
+	if got := colourAt(d.Screenshot(), image.Pt(20, boardTop+120)); got != paint.Dark().Palette.Key {
+		t.Errorf("the key with a label the font lacks has a face of %v, want the theme's %v", got, paint.Dark().Palette.Key)
 	}
 
-	if got := colourAt(d.Screenshot(), image.Pt(screenW-20, boardTop+120)); got != paint.Dark().Key {
-		t.Errorf("the key beside it has a face of %v, want the theme's %v", got, paint.Dark().Key)
-	}
-}
-
-func setLayout(t *testing.T, d *ebitenmcp.Driver, layout osk.Layout) {
-	t.Helper()
-	var err error
-	d.WithGame(func(game ebiten.Game) {
-		err = game.(*board).keyboard.SetLayout(layout)
-	})
-	if err != nil {
-		t.Fatal(err)
+	if got := colourAt(d.Screenshot(), image.Pt(screenW-20, boardTop+120)); got != paint.Dark().Palette.Key {
+		t.Errorf("the key beside it has a face of %v, want the theme's %v", got, paint.Dark().Palette.Key)
 	}
 }
 
@@ -224,7 +214,7 @@ func TestAThemeMadeFromScratchStillDrawsABoard(t *testing.T) {
 	d := ebitenmcp.T(t)
 
 	// Against the advice to start from a stock theme: two colours, and no font or size.
-	bare := paint.Theme{Key: color.RGBA{0x20, 0x60, 0x20, 0xff}, Label: color.RGBA{0xff, 0xff, 0xff, 0xff}}
+	bare := paint.Theme{Palette: paint.Palette{Key: color.RGBA{0x20, 0x60, 0x20, 0xff}, Label: color.RGBA{0xff, 0xff, 0xff, 0xff}}}
 	g := face(t, d, "G")
 
 	d.WithGame(func(game ebiten.Game) { game.(*board).painter = paint.New(bare) })
@@ -232,11 +222,11 @@ func TestAThemeMadeFromScratchStillDrawsABoard(t *testing.T) {
 
 	screen := d.Screenshot()
 
-	if got := colourAt(screen, g); got != bare.Key {
-		t.Errorf("a theme with only a key colour draws a key's face %v, want %v", got, bare.Key)
+	if got := colourAt(screen, g); got != bare.Palette.Key {
+		t.Errorf("a theme with only a key colour draws a key's face %v, want %v", got, bare.Palette.Key)
 	}
 
-	if lit := labelInk(screen, bare.Label); lit != 0 {
+	if lit := labelInk(screen, bare.Palette.Label); lit != 0 {
 		t.Errorf("a theme that gives labels no size drew %d pixels of label", lit)
 	}
 
@@ -246,7 +236,7 @@ func TestAThemeMadeFromScratchStillDrawsABoard(t *testing.T) {
 	d.WithGame(func(game ebiten.Game) { game.(*board).painter = paint.New(bare) })
 	d.Tick(2)
 
-	if lit := labelInk(d.Screenshot(), bare.Label); lit == 0 {
+	if lit := labelInk(d.Screenshot(), bare.Palette.Label); lit == 0 {
 		t.Error("a theme with a label size and no font drew no label")
 	}
 }
@@ -273,8 +263,8 @@ func TestAHiddenKeyboardIsNotDrawn(t *testing.T) {
 
 	d.Tick(1)
 
-	if got := colourAt(d.Screenshot(), g); got != paint.Dark().Key {
-		t.Fatalf("before it is hidden, the key is %v, want %v", got, paint.Dark().Key)
+	if got := colourAt(d.Screenshot(), g); got != paint.Dark().Palette.Key {
+		t.Fatalf("before it is hidden, the key is %v, want %v", got, paint.Dark().Palette.Key)
 	}
 
 	d.WithGame(func(game ebiten.Game) { game.(*board).keyboard.Hide() })

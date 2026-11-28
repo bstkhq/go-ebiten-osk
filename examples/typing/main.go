@@ -12,7 +12,7 @@ import (
 	"log"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/inpututil"
+	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/tinne26/etxt"
 
 	osk "github.com/bstkhq/go-ebiten-osk"
@@ -35,6 +35,8 @@ var (
 type game struct {
 	keyboard *osk.Keyboard
 	painter  *paint.Painter
+	custom   customPainter
+	look     int
 	text     *etxt.Renderer
 	line     []rune
 }
@@ -52,10 +54,18 @@ func newGame() (*game, error) {
 
 	keyboard.SetRect(image.Rect(0, boardTop, width, height))
 
-	theme := paint.Dark()
+	return &game{
+		keyboard: keyboard,
+		painter:  paint.New(paint.Dark()),
+		custom:   customPainter{text: newText(19)},
+		text:     newText(48),
+	}, nil
+}
 
+func newText(size float64) *etxt.Renderer {
 	text := etxt.NewRenderer()
-	text.SetFont(theme.Font)
+	text.SetFont(paint.Dark().Font)
+	text.SetSize(size)
 	text.SetColor(ink)
 	text.SetAlign(etxt.Center)
 
@@ -63,7 +73,7 @@ func newGame() (*game, error) {
 	// font's mark for a missing one, where etxt would otherwise panic.
 	text.Glyph().SetMissHandler(etxt.OnMissNotdef)
 
-	return &game{keyboard: keyboard, painter: paint.New(theme), text: text}, nil
+	return text
 }
 
 // Update reads the keyboard exactly as a game reads a physical one, with osk in the place of
@@ -74,6 +84,10 @@ func (g *game) Update() error {
 	}
 	g.keyboard.Update()
 
+	if osk.IsKeyJustPressed(ebiten.KeyF2) {
+		g.cycleLook()
+	}
+
 	if osk.IsKeyJustPressed(ebiten.KeyBackspace) {
 		g.line = g.line[:max(len(g.line)-1, 0)]
 	}
@@ -83,48 +97,25 @@ func (g *game) Update() error {
 	return nil
 }
 
-func (g *game) chooseLayout() error {
-	switch {
-	case inpututil.IsKeyJustPressed(ebiten.KeyF1):
-		return g.showCompact(osk.EnUS)
-	case inpututil.IsKeyJustPressed(ebiten.KeyF2):
-		return g.showCompact(osk.EsES)
-	case inpututil.IsKeyJustPressed(ebiten.KeyF3):
-		return g.keyboard.SetLayout(pinPad())
-	default:
-		return nil
+func (g *game) cycleLook() {
+	g.look = (g.look + 1) % 3
+	switch g.look {
+	case 0:
+		g.painter.SetTheme(paint.Dark())
+	case 1:
+		g.painter.SetTheme(paint.Light())
 	}
-}
-
-func (g *game) showCompact(locale osk.Locale) error {
-	layout, err := osk.Stock(locale, osk.Compact)
-	if err != nil {
-		return err
-	}
-	return g.keyboard.SetLayout(layout)
-}
-
-// pinPad builds a layout from the same blocks as the stock boards.
-func pinPad() osk.Layout {
-	positions := make(osk.Positions, 10)
-	rows := make([][]osk.Key, 4)
-	for i, digits := range []string{"123", "456", "789", "0"} {
-		for _, digit := range digits {
-			positions[digit] = ebiten.KeyDigit0 + ebiten.Key(digit-'0')
-			rows[i] = append(rows[i], osk.Key{Do: osk.Type(string(digit))})
-		}
-	}
-	rows[3] = append(rows[3], osk.Key{Do: osk.Erase(), Label: "Delete", Weight: 2})
-
-	return osk.Layout{Positions: positions, Layers: []osk.Layer{{Rows: rows}}}
 }
 
 func (g *game) Draw(screen *ebiten.Image) {
 	screen.Fill(background)
-	g.text.SetSize(48)
 	g.text.Draw(screen, string(g.line)+"_", width/2, boardTop/2)
-	g.text.SetSize(20)
-	g.text.Draw(screen, "F1  en-US     F2  es-ES     F3  PIN pad", width/2, boardTop-28)
+	ebitenutil.DebugPrintAt(screen, "F2  Keyboard appearance", 16, 16)
+	drawLayoutShortcuts(screen)
+	if g.look == 2 {
+		g.custom.Draw(screen, g.keyboard)
+		return
+	}
 	g.painter.Draw(screen, g.keyboard)
 }
 
