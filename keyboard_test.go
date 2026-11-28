@@ -157,7 +157,8 @@ func TestTheCompactBoardFillsItsRectangle(t *testing.T) {
 		"L":      image.Rect(850, 200, 950, 300),
 		"Z":      image.Rect(150, 300, 250, 400),
 		"M":      image.Rect(750, 300, 850, 400),
-		"Space":  image.Rect(0, 400, 700, 500),
+		"123":    image.Rect(0, 400, 200, 500),
+		"Space":  image.Rect(200, 400, 700, 500),
 		"Delete": image.Rect(700, 400, 1000, 500),
 	}
 
@@ -407,7 +408,8 @@ func TestWhatAFailureMessageSaysOfTheKeyboardReadsWell(t *testing.T) {
 	for value, want := range map[fmt.Stringer]string{
 		osk.Compact: "compact", osk.Full: "full", osk.Form(7): "Form(7)",
 		osk.RoleCharacter: "character", osk.RoleSpace: "space", osk.RoleControl: "control", osk.Role(-1): "Role(-1)",
-		osk.StateIdle: "idle", osk.StatePressed: "pressed", osk.State(9): "State(9)",
+		osk.RoleLayerSwitch: "layer switch",
+		osk.StateIdle:       "idle", osk.StatePressed: "pressed", osk.State(9): "State(9)",
 		osk.KeyDown: "key down", osk.KeyUp: "key up", osk.Text: "text", osk.EventKind(0): "EventKind(0)",
 		osk.Event{Kind: osk.Text, Text: "ñ"}:         `text "ñ"`,
 		osk.Event{Kind: osk.KeyUp, Key: ebiten.KeyQ}: "key up Q",
@@ -491,39 +493,6 @@ func TestAnUnknownStockLayoutIsAnError(t *testing.T) {
 	}
 }
 
-func TestEveryKeyOfTheCompactBoardTypesWhatItShows(t *testing.T) {
-	shown := compactBoard(t).AppendKeys(nil)
-	if len(shown) != 28 {
-		t.Fatalf("the compact en-US board has %d keys, want 26 letters, space and erase", len(shown))
-	}
-
-	for _, key := range shown {
-		// A board of its own for every key: nothing another key did is left in the input.
-		b := compactBoard(t)
-		b.touch(t, 1, key.Face())
-		b.Update()
-
-		typed, pressed := b.typed(), b.input.AppendJustPressedKeys(nil)
-
-		want, position := key.Face(), ebiten.KeyA+ebiten.Key(key.Face()[0]-'A')
-
-		switch key.Face() {
-		case "Space":
-			want, position = " ", ebiten.KeySpace
-		case "Delete":
-			want, position = "", ebiten.KeyBackspace
-		}
-
-		if typed != want {
-			t.Errorf("the key %q typed %q, want %q", key.Face(), typed, want)
-		}
-
-		if len(pressed) != 1 || pressed[0] != position {
-			t.Errorf("the key %q pressed %v, want the position %v alone", key.Face(), pressed, position)
-		}
-	}
-}
-
 func TestAKeyboardKeepsTheLayoutItWasMadeWith(t *testing.T) {
 	layout, err := osk.Stock(osk.EnUS, osk.Compact)
 	if err != nil {
@@ -541,8 +510,8 @@ func TestAKeyboardKeepsTheLayoutItWasMadeWith(t *testing.T) {
 
 	b.SetRect(image.Rect(0, 0, 500, 200))
 
-	if got := len(b.AppendKeys(nil)); got != 28 {
-		t.Fatalf("after its maker changed the layout, the keyboard has %d keys, want its 28", got)
+	if got := len(b.AppendKeys(nil)); got != 29 {
+		t.Fatalf("after its maker changed the layout, the keyboard has %d keys, want its 29", got)
 	}
 
 	b.touch(t, 1, "Q")

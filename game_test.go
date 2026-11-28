@@ -451,20 +451,19 @@ func TestAKeyboardGivenNoInputAndNoPointersUsesItsOwn(t *testing.T) {
 
 	// A game that passes what it has, and has nothing yet: the keyboard reads Ebitengine's
 	// pointers and feeds the input the package's functions answer from.
+	layout := stockBoard(t, osk.EnUS)
+	var err error
 	h.read(func(g *reader) {
-		layout, err := osk.Stock(osk.EnUS, osk.Compact)
-		if err != nil {
-			t.Fatal(err)
+		var keyboard *osk.Keyboard
+		keyboard, err = osk.New(layout, osk.WithInput(nil), osk.WithPointers(nil))
+		if err == nil {
+			keyboard.SetRect(image.Rect(0, 120, 640, 360))
+			g.keyboard = keyboard
 		}
-
-		keyboard, err := osk.New(layout, osk.WithInput(nil), osk.WithPointers(nil))
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		keyboard.SetRect(image.Rect(0, 120, 640, 360))
-		g.keyboard = keyboard
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	h.Tick(2)
 
 	h.Click(float64(at.X), float64(at.Y))

@@ -77,7 +77,7 @@ func (g *game) Update() error {
 func (*game) Draw(*ebiten.Image)         {}
 func (*game) Layout(int, int) (int, int) { return 640, 360 }
 
-func keyCenter(t *testing.T, d *driver.Driver) image.Point {
+func keyCenter(t *testing.T, d *driver.Driver, face string) image.Point {
 	t.Helper()
 	d.Tick(2)
 	var at image.Point
@@ -86,13 +86,13 @@ func keyCenter(t *testing.T, d *driver.Driver) image.Point {
 		g := running.(*game)
 		err = g.startup
 		for _, key := range g.board.AppendKeys(nil) {
-			if key.Face() == "H" {
+			if key.Face() == face {
 				at = key.Rect.Min.Add(key.Rect.Size().Div(2))
 			}
 		}
 	})
 	if err != nil || at == (image.Point{}) {
-		t.Fatalf("starting hook game: key at %v, error %v", at, err)
+		t.Fatalf("starting hook game: key %q at %v, error %v", face, at, err)
 	}
 	return at
 }
@@ -108,7 +108,7 @@ func observed(t *testing.T, d *driver.Driver) (reads, copy []reading, events []o
 
 func TestGameReadsTouchThroughEbitengine(t *testing.T) {
 	d := driver.T(t)
-	at := keyCenter(t, d)
+	at := keyCenter(t, d, "H")
 	input := d.Runtime().Injector()
 	input.SetTouches([]driver.Touch{{ID: 7, X: at.X, Y: at.Y}})
 	d.Tick(5)
@@ -139,9 +139,34 @@ func TestGameReadsTouchThroughEbitengine(t *testing.T) {
 	}
 }
 
+func TestChangingLayerReleasesHeldKeyInTheSameTick(t *testing.T) {
+	d := driver.T(t)
+	h := keyCenter(t, d, "H")
+	digits := keyCenter(t, d, "123")
+	input := d.Runtime().Injector()
+	hold := driver.Touch{ID: 7, X: h.X, Y: h.Y}
+	input.SetTouches([]driver.Touch{hold})
+	d.Tick(4)
+
+	var switchTick int
+	d.WithGame(func(running ebiten.Game) {
+		switchTick = len(running.(*game).reads)
+		input.SetTouches([]driver.Touch{hold, {ID: 8, X: digits.X, Y: digits.Y}})
+	})
+	d.Tick(3)
+
+	reads, _, _ := observed(t, d)
+	if switchTick == 0 || switchTick >= len(reads) || !reads[switchTick-1].pressed {
+		t.Fatalf("expected H held before switching layers: %v", reads)
+	}
+	if got := reads[switchTick]; got != (reading{justReleased: true}) {
+		t.Errorf("switching layers should release H in that tick without typing: %+v", got)
+	}
+}
+
 func TestMouseTapCanPressAndReleaseInOneTick(t *testing.T) {
 	d := driver.T(t)
-	at := keyCenter(t, d)
+	at := keyCenter(t, d, "H")
 	d.Move(float64(at.X), float64(at.Y))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -162,7 +187,7 @@ func TestMouseTapCanPressAndReleaseInOneTick(t *testing.T) {
 
 func TestScreenReleaseDoesNotReleasePhysicalKey(t *testing.T) {
 	d := driver.T(t)
-	at := keyCenter(t, d)
+	at := keyCenter(t, d, "H")
 	input := d.Runtime().Injector()
 	input.KeyDown(ebiten.KeyH)
 	d.Tick(3)
@@ -178,7 +203,7 @@ func TestScreenReleaseDoesNotReleasePhysicalKey(t *testing.T) {
 
 func TestPhysicalHoldPassesToScreenWhenPhysicalKeyLiftsFirst(t *testing.T) {
 	d := driver.T(t)
-	at := keyCenter(t, d)
+	at := keyCenter(t, d, "H")
 	input := d.Runtime().Injector()
 	input.KeyDown(ebiten.KeyH)
 	d.Tick(3)
@@ -194,7 +219,7 @@ func TestPhysicalHoldPassesToScreenWhenPhysicalKeyLiftsFirst(t *testing.T) {
 
 func TestPhysicalPressTakesPriorityOverAnOnScreenHold(t *testing.T) {
 	d := driver.T(t)
-	at := keyCenter(t, d)
+	at := keyCenter(t, d, "H")
 	input := d.Runtime().Injector()
 	input.SetTouches([]driver.Touch{{ID: 7, X: at.X, Y: at.Y}})
 	d.Tick(4)
@@ -267,7 +292,7 @@ func checkOneHold(t *testing.T, reads []reading) {
 
 func TestHookReleasesAKeyboardThatStopsUpdating(t *testing.T) {
 	d := driver.T(t)
-	at := keyCenter(t, d)
+	at := keyCenter(t, d, "H")
 	d.Runtime().Injector().SetTouches([]driver.Touch{{ID: 7, X: at.X, Y: at.Y}})
 	d.Tick(7)
 	d.WithGame(func(running ebiten.Game) { running.(*game).pause = true })
