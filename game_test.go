@@ -787,9 +787,12 @@ func TestATransitionTakesTheTouchAndItsMouseEchoWithoutTyping(t *testing.T) {
 		}
 	})
 
-	inject.SetTouches(nil)
-	inject.MouseUp(ebiten.MouseButtonLeft)
-	h.settle()
+	h.inOneTick(func() {
+		inject.SetTouches(nil)
+		inject.MouseUp(ebiten.MouseButtonLeft)
+	})
+	// Let the stock pointer source's three-tick mouse-echo window expire.
+	h.Tick(4)
 	h.Click(float64(at.X), float64(at.Y))
 	if got := h.text(); got != "H" {
 		t.Errorf("a fresh click typed %q, want H", got)
