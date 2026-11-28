@@ -2,6 +2,7 @@ package osk
 
 import (
 	"fmt"
+	"maps"
 
 	"github.com/hajimehoshi/ebiten/v2"
 )
@@ -151,7 +152,9 @@ func positionsEsES() Positions {
 	})
 }
 
-func withLettersAndDigits(positions Positions) Positions {
+func withLettersAndDigits(base Positions) Positions {
+	positions := make(Positions, len(base)+52+10)
+	maps.Copy(positions, base)
 	for letter := 'a'; letter <= 'z'; letter++ {
 		key := ebiten.KeyA + ebiten.Key(letter-'a')
 		positions[letter] = key

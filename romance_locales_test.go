@@ -168,6 +168,20 @@ func TestAdditionalLocaleNumberPadsAndActions(t *testing.T) {
 	}
 }
 
+func TestStockPositionMapsAreIndependent(t *testing.T) {
+	layout, err := osk.Stock(osk.PtPT, osk.Compact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	layout.Positions['ç'] = ebiten.KeyC
+	b := newKindBoard(t, osk.PtPT, osk.Full, osk.KindText, osk.ActionEnter)
+	b.tap(t, 1, "ç")
+	b.Update()
+	if !slices.Equal(b.input.AppendJustPressedKeys(nil), []ebiten.Key{ebiten.KeySemicolon}) {
+		t.Fatalf("a separate stock lookup changed the position of ç to %v", b.input.AppendJustPressedKeys(nil))
+	}
+}
+
 func checkLocalizedAction(t *testing.T, b board, action osk.FieldAction, label string) {
 	t.Helper()
 	if got := b.key(t, label).Role(); got != osk.RoleAction {

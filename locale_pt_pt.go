@@ -17,20 +17,18 @@ var portuguese = fullLocale{
 }
 
 func compactPtPT() Layout {
-	return portuguese.compact(positionsPtPT())
+	return portuguese.compact(withLettersAndDigits(portugueseBase))
 }
 
 func fullPtPT(kind Kind, action FieldAction) Layout {
-	return portuguese.layout(positionsPtPT(), kind, action)
+	return portuguese.layout(withLettersAndDigits(portugueseBase), kind, action)
 }
 
-// positionsPtPT was checked against xkeyboard-config's pt(basic).
-func positionsPtPT() Positions {
-	return withLettersAndDigits(Positions{
-		' ': ebiten.KeySpace, '\\': ebiten.KeyBackquote,
-		'\'': ebiten.KeyMinus, '«': ebiten.KeyEqual, '+': ebiten.KeyBracketLeft,
-		'ç': ebiten.KeySemicolon, 'Ç': ebiten.KeySemicolon, 'º': ebiten.KeyQuote,
-		',': ebiten.KeyComma, '.': ebiten.KeyPeriod, '-': ebiten.KeySlash,
-		'<': ebiten.KeyIntlBackslash,
-	})
+// portugueseBase was checked against xkeyboard-config's pt(basic).
+var portugueseBase = Positions{
+	' ': ebiten.KeySpace, '\\': ebiten.KeyBackquote,
+	'\'': ebiten.KeyMinus, '«': ebiten.KeyEqual, '+': ebiten.KeyBracketLeft,
+	'ç': ebiten.KeySemicolon, 'Ç': ebiten.KeySemicolon, 'º': ebiten.KeyQuote,
+	',': ebiten.KeyComma, '.': ebiten.KeyPeriod, '-': ebiten.KeySlash,
+	'<': ebiten.KeyIntlBackslash,
 }
