@@ -39,6 +39,21 @@ go run github.com/bstkhq/go-ebiten-osk/examples/typing@latest
 
 Press F2 to cycle between the dark theme, the light theme, and the example's own painter.
 
+## Layouts
+
+In the typing example, press F1 for compact en-US, F3 for compact es-ES, or F4 for a
+PIN pad built from the exported layout blocks.
+
+`osk.Stock` looks up a layout by locale and form. Compact `osk.EnUS` and `osk.EsES`
+both have uppercase letters, a `123` layer with digits and punctuation, and an
+`ABC` switch back to letters. Spanish also has an `ÁÉÍ` layer.
+
+Call `Keyboard.SetLayout` to change locale or use a custom layout. Its first
+layer takes effect immediately, and held keys are released in the next
+`Keyboard.Update`. Call it before `Update` to read those releases in the same
+game tick. Custom layouts use a `Layer.Name` and a key with
+`osk.SwitchLayer(name)` to link layers.
+
 ## Customize the keyboard
 
 Copy the default theme and change the fields you need. Sizes are fractions of a row's height.
@@ -79,11 +94,11 @@ The words used here and in the code are in the [glossary](GLOSSARY.md).
 
 Early. What works today:
 
-- the compact en-US board (letters, space, erase), typed with fingers or the mouse;
+- compact en-US and es-ES boards, typed with fingers or the mouse;
 - the input copy, alongside the physical keyboard;
 - the stock painter with dark and light themes.
 
-Planned, in the [issues](https://github.com/bstkhq/go-ebiten-osk/issues): layers and the es-ES boards, the full form for names and emails, erase that repeats, more locales, and an optional hook that makes Ebitengine's own functions report the on-screen keys, for code that cannot be changed.
+Planned, in the [issues](https://github.com/bstkhq/go-ebiten-osk/issues): the full form for names and emails, erase that repeats, more locales, and an optional hook that makes Ebitengine's own functions report the on-screen keys, for code that cannot be changed.
 
 Built and tested against Ebitengine v2.9.9. The API will change until the first tagged version.
 

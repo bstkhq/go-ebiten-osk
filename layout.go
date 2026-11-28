@@ -13,6 +13,7 @@ type Locale string
 // The locales that have stock layouts.
 const (
 	EnUS Locale = "en-US"
+	EsES Locale = "es-ES"
 )
 
 // A Form is how much keyboard is offered.
@@ -37,7 +38,8 @@ func named(enumeration string, i int, names ...string) string {
 	return names[i]
 }
 
-// A Layout is the keys of one locale in one form.
+// A Layout defines the layers and physical positions of a keyboard. A stock layout
+// serves one locale in one form.
 type Layout struct {
 	// Layers are the faces of the layout, shown one at a time. The first is the one a
 	// keyboard starts on.
@@ -51,6 +53,9 @@ type Layout struct {
 
 // A Layer is one face of a layout: its rows of keys, from the top.
 type Layer struct {
+	// Name is how a layer switch refers to this layer. A layer can be unnamed if
+	// nothing switches to it. Nonempty names must be unique within the layout.
+	Name string
 	Rows [][]Key
 }
 
@@ -106,6 +111,8 @@ func (r Role) String() string {
 // Role is what the key is for, told from what it does.
 func (k Key) Role() Role {
 	switch {
+	case k.Do.kind == switchesLayer:
+		return RoleLayerSwitch
 	case k.Do.kind == erases:
 		return RoleControl
 	case k.Do.text == " ":
@@ -124,10 +131,11 @@ func (k Key) weight() float64 {
 }
 
 // An Action is what a key does. Its zero value does nothing, and a layout with such a key is
-// refused: make one with [Type] or [Erase].
+// refused: make one with [Type], [Erase] or [SwitchLayer].
 type Action struct {
-	kind actionKind
-	text string
+	kind   actionKind
+	text   string
+	target string
 }
 
 type actionKind int
@@ -135,6 +143,7 @@ type actionKind int
 const (
 	types actionKind = iota + 1
 	erases
+	switchesLayer
 )
 
 // Type is the action of a key that types text: a character, usually, or a space.
@@ -146,6 +155,12 @@ func Type(text string) Action {
 // nothing.
 func Erase() Action {
 	return Action{kind: erases}
+}
+
+// SwitchLayer is the action of a key that shows the layer with this name. It types nothing
+// and reports no press. Give the key a Label for its face.
+func SwitchLayer(name string) Action {
+	return Action{kind: switchesLayer, target: name}
 }
 
 // position is the physical position the action presses, or noPosition for one that is text
@@ -174,42 +189,111 @@ func (a Action) position(positions Positions) ebiten.Key {
 	return key
 }
 
-// check says why a keyboard cannot work with the layout, or nil.
-func (l Layout) check() error {
+const noLayer = -1
+
+// resolve takes a keyboard's own copy of the rows and looks up what each key presses
+// or which layer it shows. An invalid layout leaves the keyboard untouched.
+func (l Layout) resolve() ([]resolvedLayer, error) {
 	if len(l.Layers) == 0 {
-		return fmt.Errorf("osk: the layout has no layer")
+		return nil, fmt.Errorf("osk: the layout has no layer")
 	}
 
+	names, err := layerNames(l.Layers)
+	if err != nil {
+		return nil, err
+	}
+
+	layers := make([]resolvedLayer, len(l.Layers))
 	for i, layer := range l.Layers {
-		if len(layer.Rows) == 0 {
-			return fmt.Errorf("osk: layer %d has no row", i+1)
-		}
-
-		for j, row := range layer.Rows {
-			if err := checkRow(row); err != nil {
-				return fmt.Errorf("osk: layer %d, row %d: %w", i+1, j+1, err)
-			}
+		layers[i], err = resolveLayer(layer, l.Positions, names)
+		if err != nil {
+			return nil, fmt.Errorf("osk: layer %d: %w", i+1, err)
 		}
 	}
 
-	return nil
+	return layers, nil
 }
 
-func checkRow(row []Key) error {
-	if len(row) == 0 {
-		return fmt.Errorf("it has no key")
-	}
-
-	for i, key := range row {
-		switch {
-		case key.Do.kind == 0:
-			return fmt.Errorf("key %d does nothing", i+1)
-		case key.Do.kind == types && key.Do.text == "":
-			return fmt.Errorf("key %d types nothing", i+1)
-		case key.Weight < 0 || math.IsNaN(key.Weight) || math.IsInf(key.Weight, 0):
-			return fmt.Errorf("key %d has the weight %v", i+1, key.Weight)
+func layerNames(layers []Layer) (map[string]int, error) {
+	names := make(map[string]int, len(layers))
+	for i, layer := range layers {
+		if layer.Name == "" {
+			continue
 		}
+		if _, exists := names[layer.Name]; exists {
+			return nil, fmt.Errorf("osk: layer %d repeats the name %q", i+1, layer.Name)
+		}
+		names[layer.Name] = i
 	}
 
-	return nil
+	return names, nil
+}
+
+// A resolved layer holds its own keys so a pointer can refer to the key it landed on
+// even after SetLayout has made another layer visible.
+type resolvedLayer struct {
+	rows [][]keyState
+}
+
+type keyState struct {
+	PlacedKey
+	position ebiten.Key
+	target   int
+	fingers  int
+}
+
+func resolveLayer(layer Layer, positions Positions, names map[string]int) (resolvedLayer, error) {
+	if len(layer.Rows) == 0 {
+		return resolvedLayer{}, fmt.Errorf("it has no row")
+	}
+
+	rows := make([][]keyState, len(layer.Rows))
+	for i, row := range layer.Rows {
+		resolved, err := resolveRow(row, positions, names)
+		if err != nil {
+			return resolvedLayer{}, fmt.Errorf("row %d: %w", i+1, err)
+		}
+		rows[i] = resolved
+	}
+
+	return resolvedLayer{rows: rows}, nil
+}
+
+func resolveRow(row []Key, positions Positions, names map[string]int) ([]keyState, error) {
+	if len(row) == 0 {
+		return nil, fmt.Errorf("it has no key")
+	}
+
+	resolved := make([]keyState, len(row))
+	for i, key := range row {
+		state, err := resolveKey(key, positions, names)
+		if err != nil {
+			return nil, fmt.Errorf("key %d %w", i+1, err)
+		}
+		resolved[i] = state
+	}
+
+	return resolved, nil
+}
+
+func resolveKey(key Key, positions Positions, names map[string]int) (keyState, error) {
+	switch {
+	case key.Do.kind == 0:
+		return keyState{}, fmt.Errorf("does nothing")
+	case key.Do.kind == types && key.Do.text == "":
+		return keyState{}, fmt.Errorf("types nothing")
+	case key.Weight < 0 || math.IsNaN(key.Weight) || math.IsInf(key.Weight, 0):
+		return keyState{}, fmt.Errorf("has the weight %v", key.Weight)
+	}
+
+	state := keyState{PlacedKey: PlacedKey{Key: key}, position: key.Do.position(positions), target: noLayer}
+	if key.Do.kind == switchesLayer {
+		target, ok := names[key.Do.target]
+		if !ok {
+			return keyState{}, fmt.Errorf("switches to an unknown layer %q", key.Do.target)
+		}
+		state.target = target
+	}
+
+	return state, nil
 }
