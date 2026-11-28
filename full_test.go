@@ -118,6 +118,7 @@ func TestFullLayersTypeAndReturnToLetters(t *testing.T) {
 			switchLayer(t, b, "123")
 			bottom[0] = "ABC"
 			checkFullLayer(t, b, fullRows(test.symbols, bottom, "", test.erase), test.space, test.erase, test.positions)
+			checkFullReturn(t, b, home, "q")
 			if test.locale == osk.EsES {
 				switchLayer(t, b, "ÁÉÍ")
 				bottom[1] = "123"
@@ -127,18 +128,19 @@ func TestFullLayersTypeAndReturnToLetters(t *testing.T) {
 					b.Update()
 				}
 				checkFullLayer(t, b, fullRows([]string{"ÁÉÍ", "ÓÚ", "ÜÇ"}, bottom, test.shift, test.erase), test.space, test.erase, test.positions)
-			}
-			if got := b.key(t, "ABC").Rect; got != home {
-				t.Errorf("the way back to letters is at %v, want %v", got, home)
-			}
-			switchLayer(t, b, "ABC")
-			if test.locale == osk.EnUS {
-				b.key(t, "q")
-			} else {
-				b.key(t, "Q") // Caps lock persists across layers.
+				checkFullReturn(t, b, home, "Q") // Caps lock persists across layers.
 			}
 		})
 	}
+}
+
+func checkFullReturn(t *testing.T, b board, home image.Rectangle, face string) {
+	t.Helper()
+	if got := b.key(t, "ABC").Rect; got != home {
+		t.Errorf("the way back to letters is at %v, want %v", got, home)
+	}
+	switchLayer(t, b, "ABC")
+	b.key(t, face)
 }
 
 func fullRows(chars, bottom []string, shift, erase string) [][]string {

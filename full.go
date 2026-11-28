@@ -37,13 +37,13 @@ func (locale fullLocale) layout(positions Positions, action FieldAction) Layout 
 	submit := Key{Do: Submit(action), Label: locale.actionLabels[action], Weight: 2}
 	toLetters, toDigits := layerSwitch(letters, "ABC"), layerSwitch(digits, "123")
 	withAccents := locale.accentRows[0] != ""
+	controls := make([]Key, 0, 4)
 	if withAccents {
-		space.Weight -= 2
+		toAccents := layerSwitch(accents, "ÁÉÍ")
+		space.Weight -= toAccents.weight()
+		controls = append(controls, toAccents)
 	}
-	controls := []Key{space, dot, submit}
-	if withAccents {
-		controls = append([]Key{layerSwitch(accents, "ÁÉÍ")}, controls...)
-	}
+	controls = append(controls, space, dot, submit)
 	// The symbols row uses a one-unit erase key to keep its nine symbols aligned
 	// with the ten units of the other rows.
 	symbolErase := erase
