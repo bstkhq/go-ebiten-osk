@@ -21,8 +21,9 @@ const (
 
 // board is a game that is a keyboard and the painter that draws it.
 type board struct {
-	keyboard *osk.Keyboard
-	painter  *paint.Painter
+	keyboard    *osk.Keyboard
+	painter     *paint.Painter
+	afterUpdate func()
 }
 
 func newBoard() ebiten.Game {
@@ -43,6 +44,9 @@ func newBoard() ebiten.Game {
 
 func (g *board) Update() error {
 	g.keyboard.Update()
+	if g.afterUpdate != nil {
+		g.afterUpdate()
+	}
 
 	return nil
 }
@@ -267,7 +271,10 @@ func TestAHiddenKeyboardIsNotDrawn(t *testing.T) {
 		t.Fatalf("before it is hidden, the key is %v, want %v", got, paint.Dark().Palette.Key)
 	}
 
-	d.WithGame(func(game ebiten.Game) { game.(*board).keyboard.Hide() })
+	d.WithGame(func(game ebiten.Game) {
+		game.(*board).keyboard.SetAnimationDuration(0)
+		game.(*board).keyboard.Hide()
+	})
 	d.Tick(2)
 
 	if got := colourAt(d.Screenshot(), g); got.R != 0 || got.G != 0 || got.B != 0 {

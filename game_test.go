@@ -708,6 +708,7 @@ func TestAGameReadsTwoKeysAndTakesAFingerInTheMargin(t *testing.T) {
 		if !slices.Equal(g.down, []ebiten.Key{ebiten.KeyI}) || g.hUps != 1 {
 			t.Errorf("after the last finger on H lifts: down %v, H releases %d", g.down, g.hUps)
 		}
+		g.keyboard.SetAnimationDuration(0)
 		g.keyboard.Hide()
 	})
 	h.Tick(3)
@@ -739,6 +740,7 @@ func TestAClosingTouchAndItsMouseEchoDoNotReachTheGame(t *testing.T) {
 		inject.MouseDown(ebiten.MouseButtonLeft)
 		game.afterUpdate = func() {
 			pressed = osk.IsKeyJustPressed(ebiten.KeyH)
+			game.keyboard.SetAnimationDuration(0)
 			game.keyboard.Hide()
 			game.recordTaken() // The game checks its own hit targets after closing the keyboard.
 			closing = slices.Clone(game.taken)
@@ -758,6 +760,43 @@ func TestAClosingTouchAndItsMouseEchoDoNotReachTheGame(t *testing.T) {
 	inject.SetTouches(nil)
 	inject.MouseUp(ebiten.MouseButtonLeft)
 	h.settle()
+}
+
+func TestATransitionTakesTheTouchAndItsMouseEchoWithoutTyping(t *testing.T) {
+	h := sit(t)
+	at := h.middle("H")
+	inject := h.Runtime().Injector()
+	h.Move(float64(at.X), float64(at.Y))
+
+	var game *reader
+	h.read(func(g *reader) { game = g })
+	h.inOneTick(func() {
+		game.keyboard.Hide()
+		inject.SetTouches([]ebitenmcp.Touch{{ID: 7, X: at.X, Y: at.Y}})
+		inject.MouseDown(ebiten.MouseButtonLeft)
+		game.afterUpdate = func() { game.keyboard.Show() }
+	})
+	h.Tick(4)
+
+	h.read(func(g *reader) {
+		if g.keyboard.Visibility() != 1 || !slices.Equal(g.taken, []osk.PointerID{7, osk.Mouse}) {
+			t.Errorf("after reversing hide: visibility %v, taken pointers %v", g.keyboard.Visibility(), g.taken)
+		}
+		if len(g.down) != 0 || len(g.pressed) != 0 || len(g.text) != 0 {
+			t.Errorf("the closing touch delivered keys %v and text %q", g.pressed, g.text)
+		}
+	})
+
+	h.inOneTick(func() {
+		inject.SetTouches(nil)
+		inject.MouseUp(ebiten.MouseButtonLeft)
+	})
+	// Let the stock pointer source's three-tick mouse-echo window expire.
+	h.Tick(4)
+	h.Click(float64(at.X), float64(at.Y))
+	if got := h.text(); got != "H" {
+		t.Errorf("a fresh click typed %q, want H", got)
+	}
 }
 
 func TestAMouseLayerSwitchReleasesTheOldKeyAndKeepsTheTouchTaken(t *testing.T) {
