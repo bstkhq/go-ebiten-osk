@@ -1,6 +1,7 @@
 package osk
 
 import (
+	"slices"
 	"strings"
 	"unicode/utf8"
 )
@@ -138,32 +139,32 @@ func (locale fullLocale) grid() fullGrid {
 	return fullGrid{width: width, letterSpan: letterSpan}
 }
 
-func (grid fullGrid) layer(name string, rows [3]string, bottom, thirdStart []Key, erase Key) Layer {
+type fullRow struct {
+	keys []Key
+	gaps []float64
+}
+
+func (grid fullGrid) layer(name string, rows [3]string, bottom fullRow, thirdStart []Key, erase Key) Layer {
 	third := grid.row(thirdStart, characters(rows[2], grid.width), []Key{erase})
-	return Layer{Name: name, Rows: [][]Key{
-		characters(rows[0], grid.width), characters(rows[1], grid.width), third, bottom,
-	}}
+	return Layer{
+		Name:    name,
+		Rows:    [][]Key{characters(rows[0], grid.width), characters(rows[1], grid.width), third.keys, bottom.keys},
+		RowGaps: [][]float64{nil, nil, third.gaps, bottom.gaps},
+	}
 }
 
 // row centers the middle keys between the keys anchored at each edge.
-func (grid fullGrid) row(left, middle, right []Key) []Key {
+func (grid fullGrid) row(left, middle, right []Key) fullRow {
+	keys := slices.Concat(left, middle, right)
 	var used float64
-	for _, keys := range [][]Key{left, middle, right} {
-		for _, key := range keys {
-			used += key.weight()
-		}
+	for _, key := range keys {
+		used += key.weight()
 	}
 	span := max(grid.letterSpan, used)
 	margin, gap := (grid.width-span)/2, (span-used)/2
-	row := append(fullGap(nil, margin), left...)
-	row = append(fullGap(row, gap), middle...)
-	row = append(fullGap(row, gap), right...)
-	return fullGap(row, margin)
-}
-
-func fullGap(row []Key, width float64) []Key {
-	if width > 0 {
-		row = append(row, Key{Do: Action{kind: reservesSpace}, Weight: width})
-	}
-	return row
+	gaps := make([]float64, len(keys)+1)
+	gaps[0], gaps[len(keys)] = margin, margin
+	gaps[len(left)] += gap
+	gaps[len(left)+len(middle)] += gap
+	return fullRow{keys: keys, gaps: gaps}
 }

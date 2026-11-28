@@ -64,7 +64,8 @@ Call `Keyboard.SetLayout` to change form or locale or use a custom layout. Its f
 layer takes effect immediately, and held keys are released in the next
 `Keyboard.Update`. Call it before `Update` to read those releases in the same
 game tick. Custom layouts use a `Layer.Name` and a key with
-`osk.SwitchLayer(name)` to link layers.
+`osk.SwitchLayer(name)` to link layers. Use `Layer.RowGaps` to reserve blank
+space before, between, or after a row's keys in the same units as their weights.
 
 ### Full form
 

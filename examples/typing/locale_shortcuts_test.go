@@ -68,9 +68,7 @@ func checkVisibleStockLayout(t *testing.T, g *game, locale osk.Locale, form osk.
 	var want, got []string
 	for _, row := range expected.Layers[0].Rows {
 		for _, key := range row {
-			if face := key.Face(); face != "" {
-				want = append(want, face)
-			}
+			want = append(want, key.Face())
 		}
 	}
 	for _, key := range g.keyboard.AppendKeys(nil) {

@@ -57,9 +57,13 @@ type Layer struct {
 	// Name is how a layer switch refers to this layer. A layer can be unnamed if
 	// nothing switches to it. Nonempty names must be unique within the layout.
 	Name string
-	// Stock rows can include spacing with no face. [Keyboard.AppendKeys]
-	// returns only the placed keys.
 	Rows [][]Key
+
+	// RowGaps reserves blank space in units of [Key.Weight]. When supplied,
+	// it has one entry per row. A nil entry leaves that row contiguous.
+	// Otherwise the entry has len(row)+1 finite, nonnegative weights, before
+	// the first key, between keys, and after the last key.
+	RowGaps [][]float64
 }
 
 // Positions maps a character to the physical position of the key that types it on a
@@ -152,7 +156,6 @@ const (
 	switchesLayer
 	shifts
 	submits
-	reservesSpace // Stock layout spacing with no visible or interactive key.
 )
 
 // Type is the action of a key that types text: a character, usually, or a space.
@@ -244,25 +247,38 @@ func layerNames(layers []Layer) (map[string]int, error) {
 // A resolved layer holds its own keys so a pointer can refer to the key it landed on
 // even after SetLayout has made another layer visible.
 type resolvedLayer struct {
-	rows [][]keyState
+	rows []resolvedRow
+}
+
+type resolvedRow struct {
+	keys   []keyState
+	weight float64
 }
 
 type keyState struct {
 	PlacedKey
-	position ebiten.Key
-	target   int
-	fingers  int
-	capital  string
+	position   ebiten.Key
+	target     int
+	fingers    int
+	capital    string
+	leadingGap float64
 }
 
 func resolveLayer(layer Layer, positions Positions, names map[string]int) (resolvedLayer, error) {
 	if len(layer.Rows) == 0 {
 		return resolvedLayer{}, fmt.Errorf("it has no row")
 	}
+	if len(layer.RowGaps) != 0 && len(layer.RowGaps) != len(layer.Rows) {
+		return resolvedLayer{}, fmt.Errorf("row gaps must describe each row")
+	}
 
-	rows := make([][]keyState, len(layer.Rows))
+	rows := make([]resolvedRow, len(layer.Rows))
 	for i, row := range layer.Rows {
-		resolved, err := resolveRow(row, positions, names)
+		var gaps []float64
+		if len(layer.RowGaps) != 0 {
+			gaps = layer.RowGaps[i]
+		}
+		resolved, err := resolveRow(row, gaps, positions, names)
 		if err != nil {
 			return resolvedLayer{}, fmt.Errorf("row %d: %w", i+1, err)
 		}
@@ -272,28 +288,57 @@ func resolveLayer(layer Layer, positions Positions, names map[string]int) (resol
 	return resolvedLayer{rows: rows}, nil
 }
 
-func resolveRow(row []Key, positions Positions, names map[string]int) ([]keyState, error) {
+func resolveRow(row []Key, gaps []float64, positions Positions, names map[string]int) (resolvedRow, error) {
 	if len(row) == 0 {
-		return nil, fmt.Errorf("it has no key")
+		return resolvedRow{}, fmt.Errorf("it has no key")
+	}
+	weight, err := gapWeight(gaps, len(row))
+	if err != nil {
+		return resolvedRow{}, err
 	}
 
-	resolved := make([]keyState, len(row))
+	resolved := resolvedRow{keys: make([]keyState, len(row)), weight: weight}
 	for i, key := range row {
 		state, err := resolveKey(key, positions, names)
 		if err != nil {
-			return nil, fmt.Errorf("key %d %w", i+1, err)
+			return resolvedRow{}, fmt.Errorf("key %d %w", i+1, err)
 		}
-		resolved[i] = state
+		if gaps != nil {
+			state.leadingGap = gaps[i]
+		}
+		resolved.keys[i] = state
+		resolved.weight += key.weight()
 	}
 
 	return resolved, nil
+}
+
+func gapWeight(gaps []float64, keyCount int) (float64, error) {
+	if gaps == nil {
+		return 0, nil
+	}
+	if len(gaps) != keyCount+1 {
+		return 0, fmt.Errorf("it needs one more gap than keys")
+	}
+	var total float64
+	for _, gap := range gaps {
+		if !validWeight(gap) {
+			return 0, fmt.Errorf("has invalid gap weight %v", gap)
+		}
+		total += gap
+	}
+	return total, nil
+}
+
+func validWeight(weight float64) bool {
+	return weight >= 0 && !math.IsInf(weight, 0)
 }
 
 func resolveKey(key Key, positions Positions, names map[string]int) (keyState, error) {
 	if err := key.Do.validate(); err != nil {
 		return keyState{}, err
 	}
-	if key.Weight < 0 || math.IsNaN(key.Weight) || math.IsInf(key.Weight, 0) {
+	if !validWeight(key.Weight) {
 		return keyState{}, fmt.Errorf("has the weight %v", key.Weight)
 	}
 
