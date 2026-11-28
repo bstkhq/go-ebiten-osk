@@ -42,6 +42,7 @@ type game struct {
 	values                   [len(fields)][]rune
 	active                   int
 	locale                   osk.Locale
+	form                     osk.Form
 	preferredForm            osk.Form
 	touches, previousTouches []ebiten.TouchID
 	input                    typingInput
@@ -136,7 +137,7 @@ func (g *game) Draw(screen *ebiten.Image) {
 	screen.Fill(background)
 	g.drawFields(screen)
 	ebitenutil.DebugPrintAt(screen, "F2  Keyboard appearance", 16, 16)
-	drawLayoutShortcuts(screen)
+	g.drawLayoutShortcuts(screen)
 	if g.look == 2 {
 		g.custom.Draw(screen, g.keyboard)
 		return

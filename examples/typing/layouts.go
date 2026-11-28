@@ -1,34 +1,44 @@
 package main
 
 import (
+	"fmt"
+	"slices"
+
 	osk "github.com/bstkhq/go-ebiten-osk"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
 
+var stockLocales = osk.StockLocales()
+
 func (g *game) chooseLayout() error {
 	switch {
 	case inpututil.IsKeyJustPressed(ebiten.KeyF1):
-		return g.selectStock(osk.EnUS, osk.Compact)
+		return g.cycleLocale()
 	case inpututil.IsKeyJustPressed(ebiten.KeyF3):
-		return g.selectStock(osk.EsES, osk.Compact)
+		return g.toggleForm()
 	case inpututil.IsKeyJustPressed(ebiten.KeyF4):
 		return g.keyboard.SetLayout(pinPad())
-	case inpututil.IsKeyJustPressed(ebiten.KeyF5):
-		return g.selectStock(osk.EnUS, osk.Full)
-	case inpututil.IsKeyJustPressed(ebiten.KeyF6):
-		return g.selectStock(osk.EsES, osk.Full)
 	default:
-		return g.chooseRegionalLayout()
+		return nil
 	}
 }
 
-func (g *game) selectStock(locale osk.Locale, form osk.Form) error {
-	if err := g.showStock(locale, form, g.active); err != nil {
+func (g *game) cycleLocale() error {
+	next := (slices.Index(stockLocales, g.locale) + 1) % len(stockLocales)
+	return g.showStock(stockLocales[next], g.form, g.active)
+}
+
+func (g *game) toggleForm() error {
+	form := osk.Compact
+	if g.form == osk.Compact {
+		form = osk.Full
+	}
+	if err := g.showStock(g.locale, form, g.active); err != nil {
 		return err
 	}
-	g.locale, g.preferredForm = locale, form
+	g.preferredForm = form
 	return nil
 }
 
@@ -41,7 +51,7 @@ func (g *game) showStock(locale osk.Locale, form osk.Form, index int) error {
 	if err := g.keyboard.SetLayout(layout); err != nil {
 		return err
 	}
-	g.active = index
+	g.active, g.locale, g.form = index, locale, form
 	return nil
 }
 
@@ -60,8 +70,8 @@ func pinPad() osk.Layout {
 	return osk.Layout{Positions: positions, Layers: []osk.Layer{{Rows: rows}}}
 }
 
-func drawLayoutShortcuts(screen *ebiten.Image) {
-	ebitenutil.DebugPrintAt(screen, "F1  en-US compact    F3  es-ES compact    F4  PIN pad\n"+
-		"F5  en-US full       F6  es-ES full\n"+
-		"F7  en-GB    F8  de-DE    F9  it-IT    (hold Shift for full)", 16, 36)
+func (g *game) drawLayoutShortcuts(screen *ebiten.Image) {
+	help := fmt.Sprintf("F1  Language (%s)    F3  Form (%s)    F4  PIN pad\nAvailable languages  %v",
+		g.locale, g.form, stockLocales)
+	ebitenutil.DebugPrintAt(screen, help, 16, 36)
 }

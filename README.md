@@ -43,12 +43,12 @@ email layout and Number opens the number pad.
 
 ## Layouts
 
-In the typing example, press F1 for compact en-US, F3 for compact es-ES, F5 for
-full en-US, or F6 for full es-ES. F4 shows a PIN pad built from the exported
-layout blocks. F7, F8 and F9 select compact en-GB, de-DE and it-IT
-respectively. Hold Shift with one of those shortcuts for the full form.
+In the typing example, press F1 to cycle through the stock locales and F3 to
+toggle between compact and full. Both keep the current field and its text.
+F4 shows a PIN pad built from the exported layout blocks.
 
-`osk.Stock` looks up a layout by locale and form. Compact `osk.EnUS` and `osk.EsES`
+`osk.StockLocales` lists the available locales. `osk.Stock` looks up a layout by
+locale and form. Compact `osk.EnUS` and `osk.EsES`
 both have uppercase letters, a `123` layer with digits and punctuation, and an
 `ABC` switch back to letters. Spanish also has an `ÁÉÍ` layer.
 
