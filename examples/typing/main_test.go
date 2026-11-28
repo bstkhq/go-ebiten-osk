@@ -54,7 +54,7 @@ func TestTheExampleOpensTheKeysForEachField(t *testing.T) {
 	d.Click(48, boardTop+37) // Q in Name.
 	d.Click(width/2, boardTop/2)
 	d.Click(48, boardTop+37) // q in Email, with the full layout active.
-	d.Click(240, height-37)  // @ beside space.
+	d.Click(288, height-37)  // @ beside space.
 	d.Click(width*5/6, boardTop/2)
 	d.Click(width/6, boardTop+37) // 1 on the number pad.
 	d.Click(width/2, boardTop+37) // 2 beside it.

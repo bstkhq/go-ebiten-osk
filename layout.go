@@ -57,6 +57,8 @@ type Layer struct {
 	// Name is how a layer switch refers to this layer. A layer can be unnamed if
 	// nothing switches to it. Nonempty names must be unique within the layout.
 	Name string
+	// Stock rows can include spacing with no face. [Keyboard.AppendKeys]
+	// returns only the placed keys.
 	Rows [][]Key
 }
 
@@ -150,6 +152,7 @@ const (
 	switchesLayer
 	shifts
 	submits
+	reservesSpace // Stock layout spacing with no visible or interactive key.
 )
 
 // Type is the action of a key that types text: a character, usually, or a space.

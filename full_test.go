@@ -132,7 +132,8 @@ func TestFullLayersTypeAndReturnToLetters(t *testing.T) {
 			if test.accentLabel != "" {
 				bottom = slices.Insert(bottom, 1, test.accentLabel)
 			}
-			checkFullLayer(t, b, fullRows(test.letters, bottom, test.shift, test.erase), test.space, test.erase, test.positions)
+			letterBottom := slices.Insert(slices.Clone(bottom), len(bottom)-3, ",")
+			checkFullLayer(t, b, fullRows(test.letters, letterBottom, test.shift, test.erase), test.space, test.erase, test.positions)
 
 			switchLayer(t, b, "123")
 			bottom[0] = "ABC"

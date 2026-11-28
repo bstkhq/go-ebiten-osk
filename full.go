@@ -1,6 +1,14 @@
 package osk
 
-import "strings"
+import (
+	"strings"
+	"unicode/utf8"
+)
+
+const (
+	fullControlWidth     = 1.5
+	fullSymbolEraseWidth = 1
+)
 
 type fullLocale struct {
 	letterRows, symbolRows, accentRows [3]string
@@ -34,42 +42,50 @@ func fullEsES(kind Kind, action FieldAction) Layout {
 }
 
 func (locale fullLocale) layout(positions Positions, kind Kind, action FieldAction) Layout {
-	erase := Key{Do: Erase(), Label: locale.erase, Icon: IconErase, Weight: 1.5}
-	submit := Key{Do: Submit(action), Label: locale.actionLabels[action], Weight: 2}
+	erase := Key{Do: Erase(), Label: locale.erase, Icon: IconErase, Weight: fullControlWidth}
+	submit := Key{Do: Submit(action), Label: locale.actionLabels[action], Weight: fullControlWidth}
 	if kind == KindNumber {
 		return numberPad(positions, erase, submit)
 	}
-	shift := Key{Do: Shift(), Label: locale.shift, Icon: IconShift, Weight: 1.5}
-	space := Key{Do: Type(" "), Label: locale.space, Weight: 5}
-	dot := Key{Do: Type(".")}
+	if action == ActionEnter {
+		submit.Icon = IconAction
+	}
+	return Layout{Layers: locale.fullLayers(kind, erase, submit), Positions: positions}
+}
+
+func (locale fullLocale) fullLayers(kind Kind, erase, submit Key) []Layer {
+	shift := Key{Do: Shift(), Label: locale.shift, Icon: IconShift, Weight: fullControlWidth}
+	tail := []Key{{Do: Type(" "), Label: locale.space, Weight: 4}, {Do: Type(".")}, submit}
 	toLetters, toDigits := layerSwitch(letters, "ABC"), layerSwitch(digits, "123")
+	toLetters.Weight, toDigits.Weight = fullControlWidth, fullControlWidth
+	letterControls, symbolControls := []Key{toDigits}, []Key{toLetters}
 	withAccents := locale.accentRows[0] != ""
-	controls := make([]Key, 0, 4)
 	if withAccents {
 		toAccents := layerSwitch(accents, locale.accentLabel)
-		space.Weight -= toAccents.weight()
-		controls = append(controls, toAccents)
+		toAccents.Weight = 1
+		letterControls = append(letterControls, toAccents)
+		symbolControls = append(symbolControls, toAccents)
 	}
-	letterControls := append([]Key{toDigits}, controls...)
-	emailSpace := space
+	context := ","
 	if kind == KindEmail {
-		letterControls = append(letterControls, Key{Do: Type("@")})
-		emailSpace.Weight--
+		context = "@"
 	}
-	letterControls = append(letterControls, emailSpace, dot, submit)
-	symbolControls := append([]Key{toLetters}, controls...)
-	symbolControls = append(symbolControls, space, dot, submit)
-	// Erase on the symbols layer uses the same width as a symbol.
+	letterTail := append([]Key{{Do: Type(context)}}, tail...)
+
+	grid := locale.grid()
+	letterBottom := grid.row(letterControls, nil, letterTail)
+	symbolBottom := grid.row(symbolControls, nil, tail)
 	symbolErase := erase
-	symbolErase.Weight = 1
+	symbolErase.Weight = fullSymbolEraseWidth
 	layers := []Layer{
-		fullLayer(letters, locale.letterRows, letterControls, []Key{shift}, erase),
-		fullLayer(digits, locale.symbolRows, symbolControls, nil, symbolErase),
+		grid.layer(letters, locale.letterRows, letterBottom, []Key{shift}, erase),
+		grid.layer(digits, locale.symbolRows, symbolBottom, nil, symbolErase),
 	}
 	if withAccents {
-		layers = append(layers, fullLayer(accents, locale.accentRows, []Key{toLetters, toDigits, space, dot, submit}, []Key{shift}, erase))
+		accentBottom := grid.row([]Key{toLetters, toDigits}, nil, tail)
+		layers = append(layers, grid.layer(accents, locale.accentRows, accentBottom, []Key{shift}, erase))
 	}
-	return Layout{Layers: layers, Positions: positions}
+	return layers
 }
 
 func (locale fullLocale) compact(positions Positions) Layout {
@@ -109,13 +125,45 @@ func numberPad(positions Positions, erase, submit Key) Layout {
 	}
 }
 
-func fullLayer(name string, rows [3]string, bottom, thirdStart []Key, erase Key) Layer {
-	thirdWidth := stockRowWidth - erase.weight()
-	for _, control := range thirdStart {
-		thirdWidth -= control.weight()
-	}
-	third := append(thirdStart, characters(rows[2], thirdWidth)...)
+// fullGrid keeps a common slot pitch across the layers. The letter span
+// anchors the edge keys while longer rows can use the full width.
+type fullGrid struct {
+	width, letterSpan float64
+}
+
+func (locale fullLocale) grid() fullGrid {
+	slots := func(row string) float64 { return float64(utf8.RuneCountInString(row)) }
+	letterSpan := max(stockRowWidth, slots(locale.letterRows[0]), slots(locale.letterRows[2])+2*fullControlWidth)
+	width := max(letterSpan, slots(locale.letterRows[1]), slots(locale.symbolRows[1]), slots(locale.symbolRows[2])+fullSymbolEraseWidth)
+	return fullGrid{width: width, letterSpan: letterSpan}
+}
+
+func (grid fullGrid) layer(name string, rows [3]string, bottom, thirdStart []Key, erase Key) Layer {
+	third := grid.row(thirdStart, characters(rows[2], grid.width), []Key{erase})
 	return Layer{Name: name, Rows: [][]Key{
-		characters(rows[0], stockRowWidth), characters(rows[1], stockRowWidth), append(third, erase), bottom,
+		characters(rows[0], grid.width), characters(rows[1], grid.width), third, bottom,
 	}}
+}
+
+// row centers the middle keys between the keys anchored at each edge.
+func (grid fullGrid) row(left, middle, right []Key) []Key {
+	var used float64
+	for _, keys := range [][]Key{left, middle, right} {
+		for _, key := range keys {
+			used += key.weight()
+		}
+	}
+	span := max(grid.letterSpan, used)
+	margin, gap := (grid.width-span)/2, (span-used)/2
+	row := append(fullGap(nil, margin), left...)
+	row = append(fullGap(row, gap), middle...)
+	row = append(fullGap(row, gap), right...)
+	return fullGap(row, margin)
+}
+
+func fullGap(row []Key, width float64) []Key {
+	if width > 0 {
+		row = append(row, Key{Do: Action{kind: reservesSpace}, Weight: width})
+	}
+	return row
 }

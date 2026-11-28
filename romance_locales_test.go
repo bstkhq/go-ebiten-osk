@@ -120,10 +120,11 @@ func TestAdditionalFullLocaleLayers(t *testing.T) {
 				b.SetRect(image.Rect(7, 3, 1004, 398))
 				home := b.key(t, "123").Rect
 				bottom := []string{"123", locale.accent, locale.space, ".", locale.actions[osk.ActionEnter]}
-				letters := slices.Clone(bottom)
+				context := ","
 				if kind == osk.KindEmail {
-					letters = slices.Insert(letters, 2, "@")
+					context = "@"
 				}
+				letters := slices.Insert(slices.Clone(bottom), 2, context)
 				checkFullLayer(t, b, fullRows(locale.letters, letters, locale.shift, locale.erase), locale.space, locale.erase, locale.positions)
 
 				switchLayer(t, b, "123")

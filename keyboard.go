@@ -206,7 +206,9 @@ func (k *Keyboard) Shown() bool {
 func (k *Keyboard) AppendKeys(keys []PlacedKey) []PlacedKey {
 	for _, row := range k.layers[k.layer].rows {
 		for i := range row {
-			keys = append(keys, k.placed(&row[i]))
+			if row[i].Do.kind != reservesSpace {
+				keys = append(keys, k.placed(&row[i]))
+			}
 		}
 	}
 	return keys
@@ -486,7 +488,9 @@ func (k *Keyboard) place() {
 			key := &row[j]
 			right := left + key.weight()*unit
 
-			key.Rect = image.Rect(int(math.Round(left)), top, int(math.Round(right)), bottom)
+			if key.Do.kind != reservesSpace {
+				key.Rect = image.Rect(int(math.Round(left)), top, int(math.Round(right)), bottom)
+			}
 
 			left = right
 		}
