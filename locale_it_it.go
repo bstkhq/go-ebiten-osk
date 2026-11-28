@@ -8,8 +8,7 @@ const ItIT Locale = "it-IT"
 var itIT = fullLocale{
 	letterRows:   [3]string{"qwertyuiop", "asdfghjkl", "zxcvbnm"},
 	symbolRows:   [3]string{"1234567890", ",-_'?!@:/&", "\\+<>;()\"£"},
-	accentRows:   [3]string{"àèé", "ìò", "ù"},
-	accentLabel:  "ÀÈÉ",
+	variants:     map[rune]string{'a': "à", 'e': "èé", 'i': "ì", 'o': "ò", 'u': "ù"},
 	space:        "Spazio",
 	shift:        "Maiusc",
 	erase:        "Cancella",

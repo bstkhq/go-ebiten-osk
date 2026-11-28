@@ -63,7 +63,6 @@ var stock = map[Locale]struct {
 const (
 	letters = "letters"
 	digits  = "digits"
-	accents = "accents"
 
 	stockRowWidth = 10
 )
@@ -84,23 +83,9 @@ func compactEnUS() Layout {
 }
 
 func compactEsES() Layout {
-	space := Key{Do: Type(" "), Label: "Espacio", Weight: 4}
-	erase := Key{Do: Erase(), Label: "Borrar", Weight: 2}
-	toLetters := layerSwitch(letters, "ABC")
-	toDigits := layerSwitch(digits, "123")
-	toAccents := layerSwitch(accents, "ÁÉÍ")
-
-	return Layout{
-		Positions: positionsEsES(),
-		Layers: []Layer{
-			compactLayer(letters, [3]string{"QWERTYUIOP", "ASDFGHJKLÑ", "ZXCVBNM"},
-				toDigits, toAccents, space, erase),
-			compactLayer(digits, [3]string{"1234567890", ".,-_'¿?¡!@", "`+´:;()/º<"},
-				toLetters, toAccents, space, erase),
-			compactLayer(accents, [3]string{"ÁÉÍ", "ÓÚ", "ÜÇ"},
-				toLetters, toDigits, space, erase),
-		},
-	}
+	locale := spanish
+	locale.symbolRows = [3]string{"1234567890", ",-_'¿?¡!@", "`+´:;()/º<"}
+	return locale.compactWithWidths(positionsEsES(), 4, 2)
 }
 
 // compactLayer puts the controls under three rows of characters.

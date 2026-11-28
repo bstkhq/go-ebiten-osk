@@ -30,12 +30,16 @@ func (p *customPainter) Draw(dst *ebiten.Image, keyboard *osk.Keyboard) {
 	}
 	rect := keyboard.Rect()
 	offset := image.Pt(0, int(math.Round(float64(rect.Dy())*(1-visibility))))
-	dst = dst.SubImage(rect).(*ebiten.Image)
-	dst.SubImage(rect.Add(offset)).(*ebiten.Image).Fill(customPanel)
+	board := dst.SubImage(rect).(*ebiten.Image)
+	board.SubImage(rect.Add(offset)).(*ebiten.Image).Fill(customPanel)
 
 	p.keys = keyboard.AppendKeys(p.keys[:0])
 	for _, key := range p.keys {
 		key.Rect = key.Rect.Add(offset)
+		p.drawKey(board, key)
+	}
+	p.keys = keyboard.AppendVariants(p.keys[:0])
+	for _, key := range p.keys {
 		p.drawKey(dst, key)
 	}
 }

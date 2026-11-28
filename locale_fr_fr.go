@@ -8,8 +8,7 @@ const FrFR Locale = "fr-FR"
 var french = fullLocale{
 	letterRows:   [3]string{"azertyuiop", "qsdfghjklm", "wxcvbn"},
 	symbolRows:   [3]string{"1234567890", ",-_'?!@:&\"", ";()=+*/$<"},
-	accentRows:   [3]string{"éèêë", "àâç", "ùûîïôœ"},
-	accentLabel:  "ÉÈÀ",
+	variants:     map[rune]string{'a': "àâ", 'c': "ç", 'e': "éèêë", 'i': "îï", 'o': "ôœ", 'u': "ùû"},
 	space:        "Espace",
 	shift:        "Maj",
 	erase:        "Effacer",

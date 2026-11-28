@@ -97,6 +97,7 @@ func (p *Painter) drawBoard(dst *ebiten.Image, keyboard *osk.Keyboard, origin im
 	p.shapes.DrawIntRect(dst, keyboard.Rect().Sub(origin))
 
 	p.keys = keyboard.AppendKeys(p.keys[:0])
+	p.keys = keyboard.AppendVariants(p.keys)
 	for _, key := range p.keys {
 		key.Rect = key.Rect.Sub(origin)
 		p.drawKey(dst, key)

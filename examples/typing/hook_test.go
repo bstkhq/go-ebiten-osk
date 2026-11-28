@@ -14,7 +14,7 @@ func TestTheExampleReadsAllThreeFieldsThroughTheHook(t *testing.T) {
 
 	d.Click(48, boardTop+37)     // Q in Name.
 	d.Click(width/2, boardTop/2) // Focus Email.
-	d.Click(240, height-37)      // @ in Email.
+	d.Click(288, height-37)      // @ in Email.
 	d.Type("a")                  // A physical character also goes to Email.
 	d.Click(width-48, height-37) // Next focuses Number.
 	d.Click(width/6, boardTop+37)
@@ -32,6 +32,10 @@ func TestTheExampleReadsAllThreeFieldsThroughTheHook(t *testing.T) {
 
 func TestTheExampleAdvancesAndSubmitsThroughTheHook(t *testing.T) {
 	checkFormActions(t, hookedExample(t))
+}
+
+func TestTypingDemoSelectsSpanishVariantsThroughTheHook(t *testing.T) {
+	exerciseSpanishPicker(t, hookedExample(t))
 }
 
 func hookedExample(t *testing.T) *ebitenmcp.Driver {

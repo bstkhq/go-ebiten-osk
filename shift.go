@@ -29,6 +29,9 @@ func nextShift(state State) State {
 func (k *Keyboard) placed(key *keyState) PlacedKey {
 	placed := key.PlacedKey
 	placed.Do.text = k.keyText(key)
+	if k.holdsVariant(key) {
+		placed.State = StatePressed
+	}
 	if key.Do.kind == shifts && k.shift != StateIdle {
 		placed.State = k.shift
 	}

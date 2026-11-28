@@ -142,10 +142,11 @@ func (k Key) weight() float64 {
 // An Action is what a key does. Its zero value does nothing, and a layout with such a key is
 // refused: make one with [Type], [Erase], [SwitchLayer], [Shift] or [Submit].
 type Action struct {
-	kind   actionKind
-	text   string
-	target string
-	field  FieldAction
+	kind     actionKind
+	text     string
+	variants string
+	target   string
+	field    FieldAction
 }
 
 type actionKind int
@@ -262,6 +263,7 @@ type keyState struct {
 	fingers    int
 	capital    string
 	leadingGap float64
+	variants   []keyState
 }
 
 func resolveLayer(layer Layer, positions Positions, names map[string]int) (resolvedLayer, error) {
@@ -345,6 +347,15 @@ func resolveKey(key Key, positions Positions, names map[string]int) (keyState, e
 	state := keyState{
 		PlacedKey: PlacedKey{Key: key}, position: key.Do.position(positions), target: noLayer,
 		capital: strings.ToUpper(key.Do.text),
+	}
+	for _, variant := range key.Do.variants {
+		do := Type(string(variant))
+		state.variants = append(state.variants, keyState{
+			PlacedKey: PlacedKey{Key: Key{Do: do}},
+			position:  do.position(positions),
+			target:    noLayer,
+			capital:   strings.ToUpper(do.text),
+		})
 	}
 	if key.Do.kind == switchesLayer {
 		target, ok := names[key.Do.target]

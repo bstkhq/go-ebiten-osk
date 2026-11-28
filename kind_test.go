@@ -29,14 +29,14 @@ func TestStockTextKindKeepsTheExistingLayouts(t *testing.T) {
 
 func TestStockEmailKeys(t *testing.T) {
 	for _, test := range []struct {
-		locale             osk.Locale
-		space, accentLabel string
+		locale osk.Locale
+		space  string
 	}{
-		{osk.EnUS, "Space", ""},
-		{osk.EsES, "Espacio", "ÁÉÍ"},
-		{"en-GB", "Space", ""},
-		{"de-DE", "Leerzeichen", ""},
-		{"it-IT", "Spazio", "ÀÈÉ"},
+		{osk.EnUS, "Space"},
+		{osk.EsES, "Espacio"},
+		{"en-GB", "Space"},
+		{"de-DE", "Leerzeichen"},
+		{"it-IT", "Spazio"},
 	} {
 		t.Run(string(test.locale), func(t *testing.T) {
 			b := newKindBoard(t, test.locale, osk.Full, osk.KindEmail, osk.ActionNext)
@@ -58,10 +58,6 @@ func TestStockEmailKeys(t *testing.T) {
 			home := b.key(t, "123").Rect
 			switchLayer(t, b, "123")
 			checkFullReturn(t, b, home, "@")
-			if test.accentLabel != "" {
-				switchLayer(t, b, test.accentLabel)
-				checkFullReturn(t, b, home, "@")
-			}
 			compact := newKindBoard(t, test.locale, osk.Compact, osk.KindEmail, osk.ActionNext)
 			compact.key(t, "Q")
 			switchLayer(t, compact, "123")
