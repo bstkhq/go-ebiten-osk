@@ -65,8 +65,8 @@ const noPosition = ebiten.Key(-1)
 type PlacedKey struct {
 	Key
 
-	// Rect is the key's place on the screen. The keys of a row tile it with no gap between
-	// them: a painter insets them as its theme says.
+	// Rect is the key's touch target on the screen, excluding any reserved row
+	// gaps. A painter can inset it as its theme says.
 	Rect image.Rectangle
 
 	State State
@@ -170,9 +170,9 @@ func (k *Keyboard) SetLayout(layout Layout) error {
 	return nil
 }
 
-// SetRect gives the keyboard the rectangle it occupies. Its keys fill it: the rows share its
-// height, and the keys of a row share its width by weight. A row lighter than the heaviest is
-// centred.
+// SetRect gives the keyboard the rectangle it occupies. The rows share its
+// height, and keys and reserved gaps use the same weight scale. A row lighter
+// than the heaviest is centered.
 func (k *Keyboard) SetRect(rect image.Rectangle) {
 	k.rect = rect
 	k.place()
@@ -205,8 +205,8 @@ func (k *Keyboard) Shown() bool {
 // returns the extended slice. It is what a painter draws.
 func (k *Keyboard) AppendKeys(keys []PlacedKey) []PlacedKey {
 	for _, row := range k.layers[k.layer].rows {
-		for i := range row {
-			keys = append(keys, k.placed(&row[i]))
+		for i := range row.keys {
+			keys = append(keys, k.placed(&row.keys[i]))
 		}
 	}
 	return keys
@@ -381,9 +381,9 @@ func (k *Keyboard) takeAt(at image.Point, lifted bool) landing {
 
 func (k *Keyboard) keyAt(at image.Point) *keyState {
 	for _, row := range k.layers[k.layer].rows {
-		for i := range row {
-			if at.In(row[i].Rect) {
-				return &row[i]
+		for i := range row.keys {
+			if at.In(row.keys[i].Rect) {
+				return &row.keys[i]
 			}
 		}
 	}
@@ -472,7 +472,7 @@ func (k *Keyboard) place() {
 	rows := k.layers[k.layer].rows
 	heaviest := 0.0
 	for _, row := range rows {
-		heaviest = math.Max(heaviest, rowWeight(row))
+		heaviest = math.Max(heaviest, row.weight)
 	}
 
 	unit := float64(k.rect.Dx()) / heaviest
@@ -480,10 +480,11 @@ func (k *Keyboard) place() {
 	for i, row := range rows {
 		top := k.rect.Min.Y + k.rect.Dy()*i/len(rows)
 		bottom := k.rect.Min.Y + k.rect.Dy()*(i+1)/len(rows)
-		left := float64(k.rect.Min.X) + (heaviest-rowWeight(row))*unit/2
+		left := float64(k.rect.Min.X) + (heaviest-row.weight)*unit/2
 
-		for j := range row {
-			key := &row[j]
+		for j := range row.keys {
+			key := &row.keys[j]
+			left += key.leadingGap * unit
 			right := left + key.weight()*unit
 
 			key.Rect = image.Rect(int(math.Round(left)), top, int(math.Round(right)), bottom)
@@ -491,13 +492,4 @@ func (k *Keyboard) place() {
 			left = right
 		}
 	}
-}
-
-func rowWeight(row []keyState) float64 {
-	total := 0.0
-	for _, key := range row {
-		total += key.weight()
-	}
-
-	return total
 }

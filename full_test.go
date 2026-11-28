@@ -78,6 +78,7 @@ func TestFullLayersTypeAndReturnToLetters(t *testing.T) {
 	for _, test := range []struct {
 		locale                     osk.Locale
 		letters, symbols           []string
+		bottomSymbols              string
 		accents                    []string
 		accentLabel                string
 		shift, erase, space, enter string
@@ -85,8 +86,9 @@ func TestFullLayersTypeAndReturnToLetters(t *testing.T) {
 	}{
 		{
 			locale: osk.EnUS, letters: []string{"qwertyuiop", "asdfghjkl", "zxcvbnm"},
-			symbols: []string{"1234567890", ",-_'?!@:/&", "`=[]\\;()\""},
-			shift:   "Shift", erase: "Delete", space: "Space", enter: "Enter",
+			bottomSymbols: "\"",
+			symbols:       []string{"1234567890", ",-_'?!@:/&", "`=[]\\;()\""},
+			shift:         "Shift", erase: "Delete", space: "Space", enter: "Enter",
 			positions: map[rune]ebiten.Key{
 				'.': ebiten.KeyPeriod, ',': ebiten.KeyComma, '-': ebiten.KeyMinus,
 				'\'': ebiten.KeyQuote, '/': ebiten.KeySlash, '`': ebiten.KeyBackquote,
@@ -96,7 +98,8 @@ func TestFullLayersTypeAndReturnToLetters(t *testing.T) {
 		},
 		{
 			locale: osk.EsES, letters: []string{"qwertyuiop", "asdfghjklñ", "zxcvbnm"},
-			accents: []string{"áéí", "óú", "üç"}, accentLabel: "ÁÉÍ",
+			bottomSymbols: "<",
+			accents:       []string{"áéí", "óú", "üç"}, accentLabel: "ÁÉÍ",
 			symbols: []string{"1234567890", ",-_'¿?¡!@+", "`´:;()/º<"},
 			shift:   "Mayús", erase: "Borrar", space: "Espacio", enter: "Intro",
 			positions: map[rune]ebiten.Key{
@@ -109,8 +112,9 @@ func TestFullLayersTypeAndReturnToLetters(t *testing.T) {
 		},
 		{
 			locale: "en-GB", letters: []string{"qwertyuiop", "asdfghjkl", "zxcvbnm"},
-			symbols: []string{"1234567890", ",-_'?!@:/&£", "`=[]\\;()\"#"},
-			shift:   "Shift", erase: "Backspace", space: "Space", enter: "Return", positions: britishPositions,
+			bottomSymbols: "\"#",
+			symbols:       []string{"1234567890", ",-_'?!@:/&£", "`=[]\\;()\"#"},
+			shift:         "Shift", erase: "Backspace", space: "Space", enter: "Return", positions: britishPositions,
 		},
 		{
 			locale: "de-DE", letters: []string{"qwertzuiopü", "asdfghjklöä", "yxcvbnmß"},
@@ -119,8 +123,9 @@ func TestFullLayersTypeAndReturnToLetters(t *testing.T) {
 		},
 		{
 			locale: "it-IT", letters: []string{"qwertyuiop", "asdfghjkl", "zxcvbnm"},
-			symbols: []string{"1234567890", ",-_'?!@:/&", "\\+<>;()\"£"},
-			accents: []string{"àèé", "ìò", "ù"}, accentLabel: "ÀÈÉ",
+			bottomSymbols: "£",
+			symbols:       []string{"1234567890", ",-_'?!@:/&", "\\+<>;()\"£"},
+			accents:       []string{"àèé", "ìò", "ù"}, accentLabel: "ÀÈÉ",
 			shift: "Maiusc", erase: "Cancella", space: "Spazio", enter: "Invio", positions: italianPositions,
 		},
 	} {
@@ -132,11 +137,12 @@ func TestFullLayersTypeAndReturnToLetters(t *testing.T) {
 			if test.accentLabel != "" {
 				bottom = slices.Insert(bottom, 1, test.accentLabel)
 			}
-			checkFullLayer(t, b, fullRows(test.letters, bottom, test.shift, test.erase), test.space, test.erase, test.positions)
+			letterBottom := slices.Insert(slices.Clone(bottom), len(bottom)-3, ",")
+			checkFullLayer(t, b, fullRows(test.letters, letterBottom, test.shift, test.erase), test.space, test.erase, test.positions)
 
 			switchLayer(t, b, "123")
 			bottom[0] = "ABC"
-			checkFullLayer(t, b, fullRows(test.symbols, bottom, "", test.erase), test.space, test.erase, test.positions)
+			checkFullLayer(t, b, fullSymbolRows(test.symbols, bottom, test.bottomSymbols, test.erase), test.space, test.erase, test.positions)
 			checkFullReturn(t, b, home, "q")
 			if test.accentLabel != "" {
 				switchLayer(t, b, test.accentLabel)
@@ -169,6 +175,13 @@ func fullRows(chars, bottom []string, shift, erase string) [][]string {
 		third = append([]string{shift}, third...)
 	}
 	return [][]string{strings.Split(chars[0], ""), strings.Split(chars[1], ""), append(third, erase), bottom}
+}
+
+func fullSymbolRows(symbols, bottom []string, extra, erase string) [][]string {
+	rows := slices.Clone(symbols)
+	rows[2] = strings.TrimSuffix(rows[2], extra)
+	controls := slices.Insert(slices.Clone(bottom), len(bottom)-3, strings.Split(extra, "")...)
+	return fullRows(rows, controls, "", erase)
 }
 
 func checkFullLayer(t *testing.T, b board, rows [][]string, space, erase string, positions map[rune]ebiten.Key) {

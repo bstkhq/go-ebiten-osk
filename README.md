@@ -64,12 +64,13 @@ Call `Keyboard.SetLayout` to change form or locale or use a custom layout. Its f
 layer takes effect immediately, and held keys are released in the next
 `Keyboard.Update`. Call it before `Update` to read those releases in the same
 game tick. Custom layouts use a `Layer.Name` and a key with
-`osk.SwitchLayer(name)` to link layers.
+`osk.SwitchLayer(name)` to link layers. Use `Layer.RowGaps` to reserve blank
+space before, between, or after a row's keys in the same units as their weights.
 
 ### Full form
 
-Ask `osk.Stock` for `osk.Full` to start with lowercase letters and a localized
-Enter key. Tap Shift once for one capital, twice for caps lock, and a third time
+Ask `osk.Stock` for `osk.Full` to start with lowercase letters and a return (↵)
+key. Tap Shift once for one capital, twice for caps lock, and a third time
 to unlock. Spanish supports both cases on the accents layer. The `123` layer
 has digits and symbols.
 
@@ -91,9 +92,17 @@ if err != nil {
 return keyboard.SetLayout(layout)
 ```
 
-`osk.KindText` gives the same layout as `osk.StockWithAction`. A full
-`osk.KindEmail` layout starts in lowercase with **@** beside Space and a
-period on the same row. Compact email uses the compact text layout.
+`osk.KindText` gives the same layout as `osk.StockWithAction`. On the full
+letters layer, Text has a comma immediately to the left of Space and Email
+has **@** in the same slot. The period stays on the right. Space spans four
+letter slots, and `123`, Shift, erase and the field action span one and a half
+slots each. Extra symbols sit beside Space on the digits and symbols layer
+to keep erase at the same width. Short rows leave space around keys.
+German uses eleven slots across the letters layer, while Catalan and
+British English center ten-slot rows on an eleven-slot grid to fit longer
+rows elsewhere.
+
+Compact email uses the compact text layout.
 `osk.KindNumber` gives both forms a localized pad with ten digits, erase, and
 the selected field action. Digits report the physical digit positions.
 
