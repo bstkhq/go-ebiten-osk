@@ -20,18 +20,10 @@ func TestTheExampleCyclesLocalesAndWrapsOncePerPress(t *testing.T) {
 		d.Hold(4, ebiten.KeyF1)
 		d.WithGame(func(ebitenGame ebiten.Game) {
 			g := ebitenGame.(*game)
-			if g.locale != locale {
-				t.Errorf("selected %s, want %s", g.locale, locale)
-			}
 			if g.active != 1 || string(g.values[1]) != "name" {
 				t.Errorf("locale switch left field %d active and email text %q", g.active, g.values[1])
 			}
-			for _, key := range g.keyboard.AppendKeys(nil) {
-				if key.Face() == "@" {
-					return
-				}
-			}
-			t.Error("the locale switch lost the full email layout")
+			checkVisibleStockLayout(t, g, locale, osk.Full, osk.KindEmail, osk.ActionNext)
 		})
 	}
 }
@@ -41,6 +33,9 @@ func TestTheExampleSwitchesLocaleAndFormOnTheNumberPad(t *testing.T) {
 	d.Click(width*5/6, boardTop/2)
 	d.Click(width/6, boardTop+37) // 1 in Number
 	d.Tap(ebiten.KeyF1)
+	d.WithGame(func(ebitenGame ebiten.Game) {
+		checkVisibleStockLayout(t, ebitenGame.(*game), osk.EsES, osk.Compact, osk.KindNumber, osk.ActionDone)
+	})
 	d.Click(width/2, boardTop+37) // 2 in Number
 	d.Tap(ebiten.KeyF3)
 	d.Click(width*5/6, boardTop+37) // 3 in Number
@@ -50,4 +45,31 @@ func TestTheExampleSwitchesLocaleAndFormOnTheNumberPad(t *testing.T) {
 			t.Errorf("layout switches left field %d active and number text %q", g.active, g.values[2])
 		}
 	})
+
+	d.Click(width/6, boardTop/2) // Name uses the selected form.
+	d.WithGame(func(ebitenGame ebiten.Game) {
+		checkVisibleStockLayout(t, ebitenGame.(*game), osk.EsES, osk.Full, osk.KindText, osk.ActionNext)
+	})
+}
+
+func checkVisibleStockLayout(t *testing.T, g *game, locale osk.Locale, form osk.Form, kind osk.Kind, action osk.FieldAction) {
+	t.Helper()
+	expected, err := osk.StockWithKind(locale, form, kind, action)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	var want, got []string
+	for _, row := range expected.Layers[0].Rows {
+		for _, key := range row {
+			want = append(want, key.Face())
+		}
+	}
+	for _, key := range g.keyboard.AppendKeys(nil) {
+		got = append(got, key.Face())
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("visible %s %s keys = %q, want %q", locale, form, got, want)
+	}
 }

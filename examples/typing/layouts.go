@@ -71,7 +71,7 @@ func pinPad() osk.Layout {
 }
 
 func (g *game) drawLayoutShortcuts(screen *ebiten.Image) {
-	help := fmt.Sprintf("F1  Language (%s)    F3  Form (%s)    F4  PIN pad\nAvailable languages  %v",
+	help := fmt.Sprintf("F1  Locale (%s)    F3  Form (%s)    F4  PIN pad\nAvailable locales  %v",
 		g.locale, g.form, stockLocales)
 	ebitenutil.DebugPrintAt(screen, help, 16, 36)
 }
