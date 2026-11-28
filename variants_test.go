@@ -185,3 +185,49 @@ func TestAnOpenPickerKeepsOtherKeysResponsive(t *testing.T) {
 		t.Errorf("lifting on the original letter typed %q and left picker %v", b.typed(), b.AppendVariants(nil))
 	}
 }
+
+func TestVariantTapsRollOverInTheOrderKeysAreTouched(t *testing.T) {
+	for _, test := range []struct{ second, want string }{
+		{"K", "Ok"}, {"Espacio", "O "}, {"123", "O"}, {"A", "Oa"},
+	} {
+		t.Run(test.second, func(t *testing.T) {
+			b := fullBoard(t, osk.EsES)
+			switchLayer(t, b, "Mayús")
+			b.touch(t, 1, "O")
+			b.Update()
+			b.touch(t, 2, test.second)
+			b.Update()
+			got := b.typed()
+			b.lift(1)
+			b.lift(2)
+			b.Update()
+			got += b.typed()
+			if got != test.want || len(b.AppendVariants(nil)) != 0 {
+				t.Errorf("rolling from Shift and o to %q typed %q, want %q", test.second, got, test.want)
+			}
+		})
+	}
+}
+
+func TestSlidingOffBeforeThePickerFreesTheLetterForAnotherTap(t *testing.T) {
+	b := fullBoard(t, osk.EsES)
+	b.touch(t, 1, "a")
+	b.Update()
+	at := centerOf(b.key(t, "s").Rect)
+	b.lift(1)
+	b.touchAt(1, at.X, at.Y)
+	b.Update()
+	if state := b.key(t, "a").State; state != osk.StateIdle {
+		t.Errorf("the abandoned letter shows %v, want idle", state)
+	}
+	b.tap(t, 2, "a")
+	b.Update()
+	if got := b.typed(); got != "a" {
+		t.Errorf("the second finger typed %q, want a", got)
+	}
+	b.lift(1)
+	b.Update()
+	if got := b.typed(); got != "" {
+		t.Errorf("the abandoned finger typed %q", got)
+	}
+}

@@ -82,11 +82,20 @@ func (*screen) AppendPointers(pointers []Pointer) []Pointer {
 
 // A large touch jump can be an identifier reused between ticks. For a deferred
 // letter the same movement is how a finger reaches or leaves its picker.
-func (s *screen) continueVariants(k *Keyboard) {
+func (*screen) continueVariants(k *Keyboard) {
 	for i := range k.down {
 		pointer := &k.down[i]
-		if pointer.ID != Mouse && k.landed[pointer.ID].variant != nil {
+		if pointer.ID != Mouse && k.variantForPointer(pointer.ID) != nil {
 			pointer.Landed = inpututil.TouchPressDuration(ebiten.TouchID(pointer.ID)) == 1
+		}
+	}
+}
+
+// The mouse's position is still available when it lifts between updates.
+func (*screen) sampleMouseRelease(k *Keyboard) {
+	if hold := k.variantForPointer(Mouse); hold != nil {
+		if _, down := findPointer(k.down, Mouse); !down {
+			hold.at = image.Pt(ebiten.CursorPosition())
 		}
 	}
 }
@@ -238,8 +247,8 @@ func (s *screen) adoptMouse(k *Keyboard, listening bool) {
 	}
 	landed := k.landed[Mouse]
 	landed.lifted = false
-	if landed.variant != nil {
-		landed.variant.id = touch.ID
+	if hold := k.variantForPointer(Mouse); hold != nil {
+		hold.id = touch.ID
 	}
 	k.landed[touch.ID] = landed
 	k.landed[Mouse] = landing{taken: true}

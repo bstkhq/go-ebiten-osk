@@ -151,8 +151,9 @@ Set a layout key's `Icon` to `osk.IconShift`, `osk.IconErase`, or `osk.IconActio
 draw a shape with the stock painter. Keep a label for painters that use words.
 
 To replace the painter, call your own drawing code in the game's `Draw`. Use
-`keyboard.Visibility()` and `keyboard.Rect()` for the panel, and `keyboard.AppendKeys` for each
-key's rectangle, role, state, and label or icon. The example's
+`keyboard.Visibility()` and `keyboard.Rect()` for the panel, `keyboard.AppendKeys` for each
+key's rectangle, role, state, and label or icon, and `keyboard.AppendVariants` for
+the picker. The example's
 [custom painter](examples/typing/painter.go) uses this same public state.
 
 ## Show and hide
@@ -177,7 +178,7 @@ the animation on or off.
 
 ## How it is made
 
-- **The keyboard draws nothing.** `osk.Keyboard` holds a layout and a rectangle, and turns the fingers and the mouse on its keys into key presses and typed text. Package `paint` draws it from a theme; a game with a look of its own draws it itself from `Keyboard.AppendKeys`.
+- **The keyboard draws nothing.** `osk.Keyboard` holds a layout and a rectangle and turns pointer input into key presses and typed text. Package `paint` draws it from a theme. A custom painter reads `Keyboard.AppendKeys` and `Keyboard.AppendVariants`.
 - **A key reports its physical position**, as Ebitengine names positions, and types its character, so bindings by position and text fields both work. A key with no key of its own on the locale's physical board is text only.
 - **Themes are values.** Start from `paint.Dark()` and change a colour, a size or the font.
 - **A game reads the input copy.** `osk.IsKeyPressed`, `osk.AppendInputChars`, `osk.IsKeyJustPressed`, `osk.IsKeyJustReleased`, `osk.KeyPressDuration`, `osk.AppendPressedKeys`, `osk.AppendJustPressedKeys` and `osk.AppendJustReleasedKeys` are Ebitengine's and `inpututil`'s functions under another import. Why this, and not writing into the engine: [ADR 0001](docs/adr/0001-a-game-reads-the-input-copy.md).

@@ -126,6 +126,24 @@ func TestATouchTakesOverItsMouseEchosPendingVariant(t *testing.T) {
 	checkPickerClosed(t, h)
 }
 
+func TestACancelledPickerLetsAReusedTouchIDPressItsNewKey(t *testing.T) {
+	h := spanishGame(t)
+	at, digits := h.middle("a"), h.middle("123")
+	inject := h.Runtime().Injector()
+	hold := ebitenmcp.Touch{ID: 8, X: at.X, Y: at.Y}
+	inject.SetTouches([]ebitenmcp.Touch{hold})
+	h.Tick(40)
+	pickerKey(t, h, "á")
+	inject.SetTouches([]ebitenmcp.Touch{hold, {ID: 9, X: digits.X, Y: digits.Y}})
+	h.settle()
+	at = h.middle("1")
+	inject.SetTouches([]ebitenmcp.Touch{{ID: 8, X: at.X, Y: at.Y}})
+	h.settle()
+	if got := h.text(); got != "1" {
+		t.Errorf("the reused touch ID typed %q, want 1 after cancelling a", got)
+	}
+}
+
 func pickerKey(t *testing.T, h hands, face string) osk.PlacedKey {
 	t.Helper()
 	var keys []osk.PlacedKey

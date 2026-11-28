@@ -30,10 +30,13 @@ type Keyboard struct {
 	releaseHolds bool // The next update releases holds after Hide or SetLayout.
 
 	// landed records each pointer's ownership and the key it still holds, if any.
-	landed       map[PointerID]landing
-	down         []Pointer
-	variantHolds []*variantHold
-	picker       *variantHold
+	landed map[PointerID]landing
+	down   []Pointer
+
+	// A pending tap can roll over to the next key. The open picker keeps
+	// its pointer until release even when another key is pressed.
+	pending *variantHold
+	picker  *variantHold
 
 	repeat eraseRepeat
 
@@ -50,10 +53,9 @@ type Keyboard struct {
 }
 
 type landing struct {
-	key     *keyState
-	variant *variantHold
-	taken   bool
-	lifted  bool
+	key    *keyState
+	taken  bool
+	lifted bool
 }
 
 // A change is what became of a physical position in one update of a keyboard: whether the
@@ -242,7 +244,7 @@ func (k *Keyboard) PointerTaken(id PointerID) bool {
 }
 
 // Update takes in the pointers of this tick. Ordinary keys act on contact. Stock letters
-// with variants act on release, allowing the pointer to hold and select a variant first.
+// with variants wait for release or the next key press, allowing time to select a variant.
 //
 // Call it once every tick, shown or hidden, before reading the input: an input answers for a
 // keyboard only in the ticks it was updated in. A keyboard listens for landings from one
@@ -266,6 +268,7 @@ func (k *Keyboard) Update() {
 	if stock != nil {
 		stock.continueVariants(k)
 		stock.adoptMouse(k, listening)
+		stock.sampleMouseRelease(k)
 	}
 	if k.releaseHolds {
 		k.cancelLandings()
@@ -360,6 +363,7 @@ func (k *Keyboard) land(listening bool) int {
 
 		landed := k.take(pointer, listening)
 		key := landed.key
+		k.rolloverVariant(key)
 		if key != nil && key.target != noLayer {
 			if target == k.layer {
 				target = key.target
@@ -387,7 +391,7 @@ func (k *Keyboard) take(pointer Pointer, listening bool) landing {
 }
 
 func (k *Keyboard) takeAt(at image.Point, lifted bool) landing {
-	if k.picker != nil && choiceAt(k.picker, at) != nil {
+	if k.picker != nil && variantAt(k.picker, at) != nil {
 		return landing{taken: true, lifted: lifted}
 	}
 	if !at.In(k.rect) {

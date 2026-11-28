@@ -14,18 +14,24 @@ _Avoid_: language, country
 
 **Form**:
 How much keyboard is offered: compact, a small board of letters and a few controls, or full, enough for names and emails.
-_Avoid_: size, mode, variant
+_Avoid_: size, mode
 
 **Layout**:
 The layers and physical positions of a keyboard. A stock layout is selected by locale, form and kind.
 _Avoid_: keymap, board definition
 
 **Layer**:
-One face of a layout, shown at a time: the letters, the digits and symbols, the accents.
+One face of a layout, shown at a time. Stock layers show letters or digits and symbols. Custom layouts can define their own layers.
 _Avoid_: page, view, level
 
 **Layer switch**:
 A key that shows a named layer of the layout.
+
+**Variant**:
+A character available by holding a base letter, such as ó on the o key.
+
+**Picker**:
+The set of variants shown beside a held letter. The pointer selects a variant by sliding to it and lifting.
 
 **Key**:
 One touch target of a layer. It can type text, erase, complete a field, or change what the keyboard shows.
