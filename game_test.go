@@ -724,6 +724,43 @@ func TestAGameReadsTwoKeysAndTakesAFingerInTheMargin(t *testing.T) {
 	h.settle()
 }
 
+func TestAClosingTouchAndItsMouseEchoDoNotReachTheGame(t *testing.T) {
+	h := sit(t)
+	at := h.middle("H")
+	inject := h.Runtime().Injector()
+	h.Move(float64(at.X), float64(at.Y))
+
+	var game *reader
+	h.read(func(g *reader) { game = g })
+
+	var closing []osk.PointerID
+	var pressed bool
+	h.inOneTick(func() {
+		inject.SetTouches([]ebitenmcp.Touch{{ID: 7, X: at.X, Y: at.Y}})
+		inject.MouseDown(ebiten.MouseButtonLeft)
+		game.afterUpdate = func() {
+			pressed = osk.IsKeyJustPressed(ebiten.KeyH)
+			game.keyboard.Hide()
+			game.recordTaken() // The game checks its own hit targets after closing the keyboard.
+			closing = slices.Clone(game.taken)
+		}
+	})
+	h.Tick(3)
+
+	h.read(func(g *reader) {
+		if !pressed || string(g.text) != "H" || !slices.Equal(closing, []osk.PointerID{7, osk.Mouse}) {
+			t.Errorf("in the closing tick: pressed %t, typed %q, taken %v", pressed, g.text, closing)
+		}
+		if len(g.taken) != 0 || g.hDown || g.hUps != 1 {
+			t.Errorf("after the hidden update: taken %v, H down %t, H releases %d", g.taken, g.hDown, g.hUps)
+		}
+	})
+
+	inject.SetTouches(nil)
+	inject.MouseUp(ebiten.MouseButtonLeft)
+	h.settle()
+}
+
 func TestAGameErasesAgainWhileTheTouchStaysDown(t *testing.T) {
 	h := sit(t)
 	for range 4 {

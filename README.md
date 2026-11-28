@@ -81,9 +81,9 @@ Update the keyboard before handling the game's own pointers. Check
 `keyboard.PointerTaken(osk.PointerID(id))` for an Ebitengine touch or
 `keyboard.PointerTaken(osk.Mouse)` for the left mouse button. A pointer that
 lands inside the shown keyboard belongs to it until it lifts, even if it lands
-in blank space or slides outside. Hiding the keyboard releases its keys and
-clears ownership. A pointer that stays down while the keyboard is shown again
-needs to lift and land to press a key.
+in blank space or slides outside. After hiding the keyboard, its next update
+releases its keys and clears ownership. A pointer that stays down while the
+keyboard is shown again needs to lift and land to press a key.
 
 An erase press sends Backspace and repeats after 30 game ticks, then every
 6 ticks. At 60 ticks per second these are 500 ms and 100 ms. Set the two counts

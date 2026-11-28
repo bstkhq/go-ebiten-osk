@@ -200,9 +200,10 @@ func (k *Keyboard) AppendEvents(events []Event) []Event {
 // PointerTaken reports whether id belongs to the keyboard in the current tick. The
 // keyboard takes a pointer that lands anywhere in its rectangle while shown, including
 // blank space, and keeps it through slides and through the update that sees a same-tick
-// tap. Call it after Update, before handling that pointer elsewhere in the game.
+// tap. Hiding the keyboard after Update keeps its pointers taken for that tick. Call
+// PointerTaken after Update, before handling the pointer elsewhere in the game.
 func (k *Keyboard) PointerTaken(id PointerID) bool {
-	return !k.hidden && k.updated == k.input.tick() && k.landed[id].taken
+	return k.updated == k.input.tick() && k.landed[id].taken
 }
 
 // Update takes in the pointers of this tick. A pointer that lands on a key presses it, and

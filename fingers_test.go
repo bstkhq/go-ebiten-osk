@@ -78,6 +78,25 @@ func TestTakenPointersFollowTheLandingEvenInTheMargin(t *testing.T) {
 	}
 }
 
+func TestHidingKeepsThePointerTakenForTheRestOfItsTick(t *testing.T) {
+	b := compactBoard(t)
+	b.touch(t, 1, "Q")
+	b.Update()
+	if b.typed() != "Q" || !b.PointerTaken(1) {
+		t.Fatalf("the keyboard typed %q and took the pointer: %t", b.typed(), b.PointerTaken(1))
+	}
+
+	b.Hide()
+	if !b.PointerTaken(1) {
+		t.Error("the closing pointer fell through in the tick it typed Q")
+	}
+
+	b.Update()
+	if b.PointerTaken(1) || !b.input.IsKeyJustReleased(ebiten.KeyQ) {
+		t.Error("the first hidden update must give up the pointer and release Q")
+	}
+}
+
 func TestAnExplicitLiftFreesTheIDForTheNextLanding(t *testing.T) {
 	b := compactBoard(t)
 	b.tap(t, 7, "Q")
