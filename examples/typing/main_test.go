@@ -2,10 +2,13 @@ package main
 
 import (
 	"image"
+	"image/color"
 	"testing"
 
 	ebitenmcp "github.com/bstkhq/go-ebiten-mcp"
 	"github.com/hajimehoshi/ebiten/v2"
+
+	"github.com/bstkhq/go-ebiten-osk/paint"
 )
 
 func TestMain(m *testing.M) {
@@ -63,6 +66,25 @@ func TestTheExampleDrawsACharacterItsFontLacks(t *testing.T) {
 	if inked(d.Screenshot()) == 0 {
 		t.Error("with a letter the font lacks in its line, the example draws nothing")
 	}
+}
+
+func TestTheExampleSwitchesThemesAndTypesWithItsOwnPainter(t *testing.T) {
+	d := ebitenmcp.T(t)
+	at := image.Pt(20, boardTop+25)
+	for _, want := range []color.RGBA{paint.Light().Palette.Key, customKey, paint.Dark().Palette.Key} {
+		d.Tap(ebiten.KeyF2)
+		if got := d.Screenshot().RGBAAt(at.X, at.Y); got != want {
+			t.Errorf("after F2 the key colour is %v, want %v", got, want)
+		}
+		if want == customKey {
+			d.Click(48, boardTop+30)
+		}
+	}
+	d.WithGame(func(g ebiten.Game) {
+		if got := string(g.(*game).line); got != "Q" {
+			t.Errorf("the custom painter's board typed %q, want Q", got)
+		}
+	})
 }
 
 // inked counts the pixels of the text's colour above the keyboard.
