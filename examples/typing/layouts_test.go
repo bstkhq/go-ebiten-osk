@@ -47,3 +47,19 @@ func TestTheExampleSwitchesBetweenFullAndCompact(t *testing.T) {
 		}
 	})
 }
+
+func TestTheExampleHonorsCompactShortcutsInEmail(t *testing.T) {
+	d := ebitenmcp.T(t)
+	d.Click(width/2, boardTop/2)
+	d.Click(48, boardTop+37) // q on the default full email board
+	d.Tap(ebiten.KeyF3)
+	d.Click(width-48, boardTop+112) // Ñ on the compact Spanish board
+	d.Tap(ebiten.KeyF1)
+	d.Click(48, boardTop+37) // Q on the compact English board
+
+	d.WithGame(func(g ebiten.Game) {
+		if got := string(g.(*game).values[1]); got != "qÑQ" {
+			t.Errorf("the email field contains %q, want qÑQ", got)
+		}
+	})
+}

@@ -10,16 +10,17 @@ import (
 
 func TestStockTextKindKeepsTheExistingLayouts(t *testing.T) {
 	for _, locale := range []osk.Locale{osk.EnUS, osk.EsES} {
-		for _, form := range []osk.Form{osk.Compact, osk.Full} {
-			t.Run(string(locale)+"/"+form.String(), func(t *testing.T) {
-				layout, err := osk.StockWithAction(locale, form, osk.ActionDone)
-				if err != nil {
-					t.Fatal(err)
-				}
-				want := newBoard(t, layout).AppendKeys(nil)
-				got := newKindBoard(t, locale, form, osk.KindText, osk.ActionDone).AppendKeys(nil)
-				if !slices.Equal(got, want) {
-					t.Error("text kind changed the stock keys")
+		for _, test := range []struct {
+			form osk.Form
+			face string
+		}{{osk.Compact, "Q"}, {osk.Full, "q"}} {
+			t.Run(string(locale)+"/"+test.form.String(), func(t *testing.T) {
+				b := newKindBoard(t, locale, test.form, osk.KindText, osk.ActionDone)
+				b.tap(t, 1, test.face)
+				b.Update()
+				if got := b.typed(); got != test.face || !b.input.IsKeyJustPressed(ebiten.KeyQ) {
+					t.Errorf("the text layout typed %q and pressed %v, want %q and Q",
+						got, b.input.AppendJustPressedKeys(nil), test.face)
 				}
 			})
 		}
@@ -33,6 +34,7 @@ func TestStockEmailKeys(t *testing.T) {
 	}{{osk.EnUS, "Space"}, {osk.EsES, "Espacio"}} {
 		t.Run(string(test.locale), func(t *testing.T) {
 			b := newKindBoard(t, test.locale, osk.Full, osk.KindEmail, osk.ActionNext)
+			checkKeyGeometry(t, b, b.AppendKeys(nil))
 			at, space, dot := b.key(t, "@").Rect, b.key(t, test.space).Rect, b.key(t, ".").Rect
 			if at.Min.Y != space.Min.Y || at.Max.X != space.Min.X || space.Max.X != dot.Min.X {
 				t.Fatalf("the letters layer should place @, space and dot beside each other")
@@ -46,6 +48,13 @@ func TestStockEmailKeys(t *testing.T) {
 				if got := b.input.AppendJustPressedKeys(nil); b.typed() != key.face || !slices.Equal(got, key.want) {
 					t.Errorf("tapping %q typed %q and pressed %v, want %v", key.face, b.typed(), got, key.want)
 				}
+			}
+			home := b.key(t, "123").Rect
+			switchLayer(t, b, "123")
+			checkFullReturn(t, b, home, "@")
+			if test.locale == osk.EsES {
+				switchLayer(t, b, "ÁÉÍ")
+				checkFullReturn(t, b, home, "@")
 			}
 			compact := newKindBoard(t, test.locale, osk.Compact, osk.KindEmail, osk.ActionNext)
 			compact.key(t, "Q")

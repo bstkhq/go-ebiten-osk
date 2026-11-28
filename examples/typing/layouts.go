@@ -10,34 +10,38 @@ import (
 func (g *game) chooseLayout() error {
 	switch {
 	case inpututil.IsKeyJustPressed(ebiten.KeyF1):
-		return g.showStock(osk.EnUS, osk.Compact, g.active)
+		return g.selectStock(osk.EnUS, osk.Compact)
 	case inpututil.IsKeyJustPressed(ebiten.KeyF3):
-		return g.showStock(osk.EsES, osk.Compact, g.active)
+		return g.selectStock(osk.EsES, osk.Compact)
 	case inpututil.IsKeyJustPressed(ebiten.KeyF4):
 		return g.keyboard.SetLayout(pinPad())
 	case inpututil.IsKeyJustPressed(ebiten.KeyF5):
-		return g.showStock(osk.EnUS, osk.Full, g.active)
+		return g.selectStock(osk.EnUS, osk.Full)
 	case inpututil.IsKeyJustPressed(ebiten.KeyF6):
-		return g.showStock(osk.EsES, osk.Full, g.active)
+		return g.selectStock(osk.EsES, osk.Full)
 	default:
 		return nil
 	}
 }
 
+func (g *game) selectStock(locale osk.Locale, form osk.Form) error {
+	if err := g.showStock(locale, form, g.active); err != nil {
+		return err
+	}
+	g.locale, g.preferredForm = locale, form
+	return nil
+}
+
 func (g *game) showStock(locale osk.Locale, form osk.Form, index int) error {
 	field := fields[index]
-	boardForm := form
-	if field.kind == osk.KindEmail {
-		boardForm = osk.Full
-	}
-	layout, err := osk.StockWithKind(locale, boardForm, field.kind, field.action)
+	layout, err := osk.StockWithKind(locale, form, field.kind, field.action)
 	if err != nil {
 		return err
 	}
 	if err := g.keyboard.SetLayout(layout); err != nil {
 		return err
 	}
-	g.locale, g.form, g.active = locale, form, index
+	g.active = index
 	return nil
 }
 

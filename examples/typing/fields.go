@@ -30,23 +30,36 @@ func fieldRect(index int) image.Rectangle {
 func (g *game) chooseField() error {
 	g.previousTouches, g.touches = g.touches, ebiten.AppendTouchIDs(g.previousTouches[:0])
 	for _, id := range g.touches {
-		if !slices.Contains(g.previousTouches, id) {
-			return g.focusAt(image.Pt(ebiten.TouchPosition(id)))
+		if slices.Contains(g.previousTouches, id) {
+			continue
+		}
+		if index, ok := g.fieldAt(image.Pt(ebiten.TouchPosition(id))); ok {
+			return g.focus(index)
 		}
 	}
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
-		return g.focusAt(image.Pt(ebiten.CursorPosition()))
+		if index, ok := g.fieldAt(image.Pt(ebiten.CursorPosition())); ok {
+			return g.focus(index)
+		}
 	}
 	return nil
 }
 
-func (g *game) focusAt(point image.Point) error {
+func (g *game) fieldAt(point image.Point) (int, bool) {
 	for index := range fields {
 		if index != g.active && point.In(fieldRect(index)) {
-			return g.showStock(g.locale, g.form, index)
+			return index, true
 		}
 	}
-	return nil
+	return 0, false
+}
+
+func (g *game) focus(index int) error {
+	form := g.preferredForm
+	if fields[index].kind == osk.KindEmail {
+		form = osk.Full
+	}
+	return g.showStock(g.locale, form, index)
 }
 
 func (g *game) drawFields(screen *ebiten.Image) {

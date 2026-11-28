@@ -41,7 +41,7 @@ type game struct {
 	values                   [len(fields)][]rune
 	active                   int
 	locale                   osk.Locale
-	form                     osk.Form
+	preferredForm            osk.Form
 	touches, previousTouches []ebiten.TouchID
 }
 
@@ -59,12 +59,12 @@ func newGame() (*game, error) {
 	keyboard.SetRect(image.Rect(0, boardTop, width, height))
 
 	return &game{
-		keyboard: keyboard,
-		painter:  paint.New(paint.Dark()),
-		custom:   customPainter{text: newText(19)},
-		text:     newText(24),
-		locale:   osk.EnUS,
-		form:     osk.Compact,
+		keyboard:      keyboard,
+		painter:       paint.New(paint.Dark()),
+		custom:        customPainter{text: newText(19)},
+		text:          newText(24),
+		locale:        osk.EnUS,
+		preferredForm: osk.Compact,
 	}, nil
 }
 
@@ -103,8 +103,15 @@ func (g *game) Update() error {
 	}
 	g.values[g.active] = osk.AppendInputChars(value)
 
-	if osk.IsKeyJustPressed(ebiten.KeyEnter) && g.active+1 < len(fields) {
-		return g.showStock(g.locale, g.form, g.active+1)
+	if osk.IsKeyJustPressed(ebiten.KeyEnter) {
+		return g.advanceField()
+	}
+	return nil
+}
+
+func (g *game) advanceField() error {
+	if fields[g.active].action == osk.ActionNext && g.active+1 < len(fields) {
+		return g.focus(g.active + 1)
 	}
 	return nil
 }
