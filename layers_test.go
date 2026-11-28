@@ -186,15 +186,15 @@ func expectedKey(face string, controls []string, positions map[rune]ebiten.Key) 
 		return "", []ebiten.Key{ebiten.KeyBackspace}
 	}
 	character := []rune(face)[0]
+	if position, ok := positions[character]; ok {
+		return face, []ebiten.Key{position}
+	}
 	capital := unicode.ToUpper(character)
 	switch {
 	case 'A' <= capital && capital <= 'Z':
 		return face, []ebiten.Key{ebiten.KeyA + ebiten.Key(capital-'A')}
 	case '0' <= character && character <= '9':
 		return face, []ebiten.Key{ebiten.KeyDigit0 + ebiten.Key(character-'0')}
-	}
-	if position, ok := positions[character]; ok {
-		return face, []ebiten.Key{position}
 	}
 	return face, nil
 }
