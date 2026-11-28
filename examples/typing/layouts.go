@@ -10,26 +10,35 @@ import (
 func (g *game) chooseLayout() error {
 	switch {
 	case inpututil.IsKeyJustPressed(ebiten.KeyF1):
-		return g.showStock(osk.EnUS, osk.Compact)
+		return g.showStock(osk.EnUS, osk.Compact, g.active)
 	case inpututil.IsKeyJustPressed(ebiten.KeyF3):
-		return g.showStock(osk.EsES, osk.Compact)
+		return g.showStock(osk.EsES, osk.Compact, g.active)
 	case inpututil.IsKeyJustPressed(ebiten.KeyF4):
 		return g.keyboard.SetLayout(pinPad())
 	case inpututil.IsKeyJustPressed(ebiten.KeyF5):
-		return g.showStock(osk.EnUS, osk.Full)
+		return g.showStock(osk.EnUS, osk.Full, g.active)
 	case inpututil.IsKeyJustPressed(ebiten.KeyF6):
-		return g.showStock(osk.EsES, osk.Full)
+		return g.showStock(osk.EsES, osk.Full, g.active)
 	default:
 		return nil
 	}
 }
 
-func (g *game) showStock(locale osk.Locale, form osk.Form) error {
-	layout, err := osk.Stock(locale, form)
+func (g *game) showStock(locale osk.Locale, form osk.Form, index int) error {
+	field := fields[index]
+	boardForm := form
+	if field.kind == osk.KindEmail {
+		boardForm = osk.Full
+	}
+	layout, err := osk.StockWithKind(locale, boardForm, field.kind, field.action)
 	if err != nil {
 		return err
 	}
-	return g.keyboard.SetLayout(layout)
+	if err := g.keyboard.SetLayout(layout); err != nil {
+		return err
+	}
+	g.locale, g.form, g.active = locale, form, index
+	return nil
 }
 
 // pinPad builds a layout from the same blocks as the stock boards.

@@ -1,4 +1,4 @@
-// Command typing shows the on-screen keyboard typing a line of text.
+// Command typing shows the on-screen keyboard in three kinds of field.
 //
 // The game reads its keyboard through the input copy, so the keys on the screen and the keys of
 // the physical keyboard both type:
@@ -31,14 +31,18 @@ var (
 	ink        = color.RGBA{0xf1, 0xf2, 0xf4, 0xff}
 )
 
-// game is a line of text and the keyboard that types it.
+// game is a form and the keyboard that types into its fields.
 type game struct {
-	keyboard *osk.Keyboard
-	painter  *paint.Painter
-	custom   customPainter
-	look     int
-	text     *etxt.Renderer
-	line     []rune
+	keyboard                 *osk.Keyboard
+	painter                  *paint.Painter
+	custom                   customPainter
+	look                     int
+	text                     *etxt.Renderer
+	values                   [len(fields)][]rune
+	active                   int
+	locale                   osk.Locale
+	form                     osk.Form
+	touches, previousTouches []ebiten.TouchID
 }
 
 func newGame() (*game, error) {
@@ -58,7 +62,9 @@ func newGame() (*game, error) {
 		keyboard: keyboard,
 		painter:  paint.New(paint.Dark()),
 		custom:   customPainter{text: newText(19)},
-		text:     newText(48),
+		text:     newText(24),
+		locale:   osk.EnUS,
+		form:     osk.Compact,
 	}, nil
 }
 
@@ -79,6 +85,9 @@ func newText(size float64) *etxt.Renderer {
 // Update reads the keyboard exactly as a game reads a physical one, with osk in the place of
 // ebiten and inpututil.
 func (g *game) Update() error {
+	if err := g.chooseField(); err != nil {
+		return err
+	}
 	if err := g.chooseLayout(); err != nil {
 		return err
 	}
@@ -88,12 +97,15 @@ func (g *game) Update() error {
 		g.cycleLook()
 	}
 
+	value := g.values[g.active]
 	if osk.IsKeyJustPressed(ebiten.KeyBackspace) {
-		g.line = g.line[:max(len(g.line)-1, 0)]
+		value = value[:max(len(value)-1, 0)]
 	}
+	g.values[g.active] = osk.AppendInputChars(value)
 
-	g.line = osk.AppendInputChars(g.line)
-
+	if osk.IsKeyJustPressed(ebiten.KeyEnter) && g.active+1 < len(fields) {
+		return g.showStock(g.locale, g.form, g.active+1)
+	}
 	return nil
 }
 
@@ -109,7 +121,7 @@ func (g *game) cycleLook() {
 
 func (g *game) Draw(screen *ebiten.Image) {
 	screen.Fill(background)
-	g.text.Draw(screen, string(g.line)+"_", width/2, boardTop/2)
+	g.drawFields(screen)
 	ebitenutil.DebugPrintAt(screen, "F2  Keyboard appearance", 16, 16)
 	drawLayoutShortcuts(screen)
 	if g.look == 2 {

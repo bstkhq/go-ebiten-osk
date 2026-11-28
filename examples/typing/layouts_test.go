@@ -22,7 +22,7 @@ func TestTheExampleSwitchesBetweenLocalesAndItsPINPad(t *testing.T) {
 	d.Tick(2)
 
 	d.WithGame(func(g ebiten.Game) {
-		if got := string(g.(*game).line); got != "Ñ12Q" {
+		if got := string(g.(*game).values[0]); got != "Ñ12Q" {
 			t.Errorf("switching layout and typing left %q, want Ñ12Q", got)
 		}
 	})
@@ -42,7 +42,7 @@ func TestTheExampleSwitchesBetweenFullAndCompact(t *testing.T) {
 	d.Tick(2)
 
 	d.WithGame(func(g ebiten.Game) {
-		if got := string(g.(*game).line); got != "ñqQ" {
+		if got := string(g.(*game).values[0]); got != "ñqQ" {
 			t.Errorf("switching forms and typing left %q, want ñqQ", got)
 		}
 	})
