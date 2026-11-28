@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"unicode"
 
 	osk "github.com/bstkhq/go-ebiten-osk"
 	"github.com/hajimehoshi/ebiten/v2"
@@ -125,7 +126,8 @@ func checkLayer(t *testing.T, b board, characters string, controls, switches []s
 	remaining := append(strings.Split(characters, ""), controls...)
 	remaining = append(remaining, switches...)
 
-	for i, key := range keys {
+	checkKeyGeometry(t, b, keys)
+	for _, key := range keys {
 		face := key.Face()
 		found := slices.Index(remaining, face)
 		if found < 0 {
@@ -133,36 +135,46 @@ func checkLayer(t *testing.T, b board, characters string, controls, switches []s
 			continue
 		}
 		remaining = slices.Delete(remaining, found, found+1)
-		if key.Rect.Empty() || !key.Rect.In(b.Rect()) {
-			t.Errorf("key %q is at %v, outside %v", face, key.Rect, b.Rect())
-		}
-		for _, other := range keys[i+1:] {
-			if key.Rect.Overlaps(other.Rect) {
-				t.Errorf("keys %q and %q overlap at %v and %v", face, other.Face(), key.Rect, other.Rect)
-			}
-		}
-
 		if slices.Contains(switches, face) {
 			if key.Role() != osk.RoleLayerSwitch {
 				t.Errorf("key %q has role %v, want layer switch", face, key.Role())
 			}
 			continue
 		}
-		text, pressed := expectedKey(face, controls, positions)
-		b.tap(t, 1, face)
-		b.Update()
-		if got := b.typed(); got != text {
-			t.Errorf("key %q typed %q, want %q", face, got, text)
-		}
-		if got := b.input.AppendJustPressedKeys(nil); !slices.Equal(got, pressed) {
-			t.Errorf("key %q pressed %v, want %v", face, got, pressed)
-		}
-		if got := b.input.AppendJustReleasedKeys(nil); !slices.Equal(got, pressed) {
-			t.Errorf("key %q released %v, want %v", face, got, pressed)
-		}
+		checkTyping(t, b, face, controls, positions)
 	}
 	if len(remaining) != 0 {
 		t.Errorf("layer is missing the keys %q", remaining)
+	}
+}
+
+func checkTyping(t *testing.T, b board, face string, controls []string, positions map[rune]ebiten.Key) {
+	t.Helper()
+	text, pressed := expectedKey(face, controls, positions)
+	b.tap(t, 1, face)
+	b.Update()
+	if got := b.typed(); got != text {
+		t.Errorf("key %q typed %q, want %q", face, got, text)
+	}
+	if got := b.input.AppendJustPressedKeys(nil); !slices.Equal(got, pressed) {
+		t.Errorf("key %q pressed %v, want %v", face, got, pressed)
+	}
+	if got := b.input.AppendJustReleasedKeys(nil); !slices.Equal(got, pressed) {
+		t.Errorf("key %q released %v, want %v", face, got, pressed)
+	}
+}
+
+func checkKeyGeometry(t *testing.T, b board, keys []osk.PlacedKey) {
+	t.Helper()
+	for i, key := range keys {
+		if key.Rect.Empty() || !key.Rect.In(b.Rect()) {
+			t.Errorf("key %q is at %v, outside %v", key.Face(), key.Rect, b.Rect())
+		}
+		for _, other := range keys[i+1:] {
+			if key.Rect.Overlaps(other.Rect) {
+				t.Errorf("keys %q and %q overlap at %v and %v", key.Face(), other.Face(), key.Rect, other.Rect)
+			}
+		}
 	}
 }
 
@@ -174,9 +186,10 @@ func expectedKey(face string, controls []string, positions map[rune]ebiten.Key) 
 		return "", []ebiten.Key{ebiten.KeyBackspace}
 	}
 	character := []rune(face)[0]
+	capital := unicode.ToUpper(character)
 	switch {
-	case 'A' <= character && character <= 'Z':
-		return face, []ebiten.Key{ebiten.KeyA + ebiten.Key(character-'A')}
+	case 'A' <= capital && capital <= 'Z':
+		return face, []ebiten.Key{ebiten.KeyA + ebiten.Key(capital-'A')}
 	case '0' <= character && character <= '9':
 		return face, []ebiten.Key{ebiten.KeyDigit0 + ebiten.Key(character-'0')}
 	}

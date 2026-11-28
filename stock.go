@@ -8,12 +8,21 @@ import (
 
 // Stock is the layout the library ships for a locale in a form.
 func Stock(locale Locale, form Form) (Layout, error) {
+	return StockWithAction(locale, form, ActionEnter)
+}
+
+// StockWithAction looks up a stock layout with the requested field action. Compact
+// layouts have no action key.
+func StockWithAction(locale Locale, form Form, action FieldAction) (Layout, error) {
+	if !action.valid() {
+		return Layout{}, fmt.Errorf("osk: unknown field action %v", action)
+	}
 	build, ok := stock[stockKey{locale, form}]
 	if !ok {
 		return Layout{}, fmt.Errorf("osk: no stock %v layout for the locale %q", form, locale)
 	}
 
-	return build(), nil
+	return build(action), nil
 }
 
 type stockKey struct {
@@ -21,9 +30,11 @@ type stockKey struct {
 	form   Form
 }
 
-var stock = map[stockKey]func() Layout{
+var stock = map[stockKey]func(FieldAction) Layout{
 	{EnUS, Compact}: compactEnUS,
 	{EsES, Compact}: compactEsES,
+	{EnUS, Full}:    fullEnUS,
+	{EsES, Full}:    fullEsES,
 }
 
 const (
@@ -32,7 +43,7 @@ const (
 	accents = "accents"
 )
 
-func compactEnUS() Layout {
+func compactEnUS(FieldAction) Layout {
 	space := Key{Do: Type(" "), Label: "Space", Weight: 5}
 	erase := Key{Do: Erase(), Label: "Delete", Weight: 3}
 
@@ -47,7 +58,7 @@ func compactEnUS() Layout {
 	}
 }
 
-func compactEsES() Layout {
+func compactEsES(FieldAction) Layout {
 	space := Key{Do: Type(" "), Label: "Espacio", Weight: 4}
 	erase := Key{Do: Erase(), Label: "Borrar", Weight: 2}
 	toLetters := layerSwitch(letters, "ABC")
