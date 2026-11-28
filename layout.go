@@ -3,6 +3,7 @@ package osk
 import (
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
 )
@@ -113,8 +114,10 @@ func (k Key) Role() Role {
 	switch {
 	case k.Do.kind == switchesLayer:
 		return RoleLayerSwitch
-	case k.Do.kind == erases:
+	case k.Do.kind == erases, k.Do.kind == shifts:
 		return RoleControl
+	case k.Do.kind == submits:
+		return RoleAction
 	case k.Do.text == " ":
 		return RoleSpace
 	default:
@@ -131,11 +134,12 @@ func (k Key) weight() float64 {
 }
 
 // An Action is what a key does. Its zero value does nothing, and a layout with such a key is
-// refused: make one with [Type], [Erase] or [SwitchLayer].
+// refused: make one with [Type], [Erase], [SwitchLayer], [Shift] or [Submit].
 type Action struct {
 	kind   actionKind
 	text   string
 	target string
+	field  FieldAction
 }
 
 type actionKind int
@@ -144,6 +148,8 @@ const (
 	types actionKind = iota + 1
 	erases
 	switchesLayer
+	shifts
+	submits
 )
 
 // Type is the action of a key that types text: a character, usually, or a space.
@@ -167,8 +173,11 @@ func SwitchLayer(name string) Action {
 // only: its text is not one character, or the layout gives that character no position that
 // Ebitengine has.
 func (a Action) position(positions Positions) ebiten.Key {
-	if a.kind == erases {
+	switch a.kind {
+	case erases:
 		return ebiten.KeyBackspace
+	case submits:
+		return ebiten.KeyEnter
 	}
 
 	runes := []rune(a.text)
@@ -240,6 +249,7 @@ type keyState struct {
 	position ebiten.Key
 	target   int
 	fingers  int
+	capital  string
 }
 
 func resolveLayer(layer Layer, positions Positions, names map[string]int) (resolvedLayer, error) {
@@ -277,16 +287,17 @@ func resolveRow(row []Key, positions Positions, names map[string]int) ([]keyStat
 }
 
 func resolveKey(key Key, positions Positions, names map[string]int) (keyState, error) {
-	switch {
-	case key.Do.kind == 0:
-		return keyState{}, fmt.Errorf("does nothing")
-	case key.Do.kind == types && key.Do.text == "":
-		return keyState{}, fmt.Errorf("types nothing")
-	case key.Weight < 0 || math.IsNaN(key.Weight) || math.IsInf(key.Weight, 0):
+	if err := key.Do.validate(); err != nil {
+		return keyState{}, err
+	}
+	if key.Weight < 0 || math.IsNaN(key.Weight) || math.IsInf(key.Weight, 0) {
 		return keyState{}, fmt.Errorf("has the weight %v", key.Weight)
 	}
 
-	state := keyState{PlacedKey: PlacedKey{Key: key}, position: key.Do.position(positions), target: noLayer}
+	state := keyState{
+		PlacedKey: PlacedKey{Key: key}, position: key.Do.position(positions), target: noLayer,
+		capital: strings.ToUpper(key.Do.text),
+	}
 	if key.Do.kind == switchesLayer {
 		target, ok := names[key.Do.target]
 		if !ok {
@@ -296,4 +307,17 @@ func resolveKey(key Key, positions Positions, names map[string]int) (keyState, e
 	}
 
 	return state, nil
+}
+
+func (a Action) validate() error {
+	switch {
+	case a.kind == 0:
+		return fmt.Errorf("does nothing")
+	case a.kind == types && a.text == "":
+		return fmt.Errorf("types nothing")
+	case a.kind == submits && !a.field.valid():
+		return fmt.Errorf("has unknown field action %v", a.field)
+	default:
+		return nil
+	}
 }

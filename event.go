@@ -15,6 +15,9 @@ type Event struct {
 
 	// Text is what was typed, on a Text.
 	Text string
+
+	// FieldAction is what the action key says to do, on an ActionPressed event.
+	FieldAction FieldAction
 }
 
 // An EventKind tells the events of a keyboard apart.
@@ -28,16 +31,21 @@ const (
 	KeyUp
 	// Text is text being typed.
 	Text
+	// ActionPressed is an activation of the on-screen action key.
+	ActionPressed
 )
 
 func (k EventKind) String() string {
-	return named("EventKind", int(k), "", "key down", "key up", "text")
+	return named("EventKind", int(k), "", "key down", "key up", "text", "action pressed")
 }
 
 func (e Event) String() string {
-	if e.Kind == Text {
+	switch e.Kind {
+	case Text:
 		return fmt.Sprintf("%v %q", e.Kind, e.Text)
+	case ActionPressed:
+		return fmt.Sprintf("%v %v", e.Kind, e.FieldAction)
+	default:
+		return fmt.Sprintf("%v %v", e.Kind, e.Key)
 	}
-
-	return fmt.Sprintf("%v %v", e.Kind, e.Key)
 }
