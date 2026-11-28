@@ -4,6 +4,7 @@ import (
 	"image"
 	"image/color"
 	"testing"
+	"time"
 
 	ebitenmcp "github.com/bstkhq/go-ebiten-mcp"
 	"github.com/hajimehoshi/ebiten/v2"
@@ -129,6 +130,70 @@ func TestTheExampleSwitchesThemesAndTypesWithItsOwnPainter(t *testing.T) {
 			t.Errorf("the custom painter's board typed %q, want Q", got)
 		}
 	})
+}
+
+func TestTheExampleShowsAndHidesWithAndWithoutAnimation(t *testing.T) {
+	d := ebitenmcp.T(t)
+	at := image.Pt(20, boardTop+25)
+	requirePartialBoard(t, firstFrameAfterF7(t, d))
+	d.Tick(15)
+	if got := d.Screenshot().RGBAAt(at.X, at.Y); got != background {
+		t.Errorf("after hiding, the board pixel is %v, want the background", got)
+	}
+
+	d.Tap(ebiten.KeyF8)
+	d.Tap(ebiten.KeyF7)
+	if got := d.Screenshot().RGBAAt(at.X, at.Y); got != paint.Dark().Palette.Key {
+		t.Errorf("after showing with animation off, the key colour is %v", got)
+	}
+	d.Tap(ebiten.KeyF7)
+	if got := d.Screenshot().RGBAAt(at.X, at.Y); got != background {
+		t.Errorf("after hiding with animation off, the board pixel is %v", got)
+	}
+	d.Tap(ebiten.KeyF8)
+	requirePartialBoard(t, firstFrameAfterF7(t, d))
+	d.Tick(15)
+	if got := d.Screenshot().RGBAAt(at.X, at.Y); got != paint.Dark().Palette.Key {
+		t.Errorf("after showing with animation back on, the key colour is %v", got)
+	}
+}
+
+func firstFrameAfterF7(t *testing.T, d *ebitenmcp.Driver) *image.RGBA {
+	t.Helper()
+	runtime := d.Runtime()
+	inject := runtime.Injector()
+	// Inject F7 and request the step in one engine tick. Step pauses the game
+	// again after that update, leaving the first transition frame to capture.
+	var tick int64
+	d.WithGame(func(ebiten.Game) {
+		tick = runtime.Tick()
+		inject.KeyDown(ebiten.KeyF7)
+		runtime.Step(1)
+	})
+	defer func() {
+		d.WithGame(func(ebiten.Game) {
+			inject.KeyUp(ebiten.KeyF7)
+			runtime.Resume()
+		})
+	}()
+	deadline := time.Now().Add(5 * time.Second)
+	for runtime.Tick() == tick && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if runtime.Tick() != tick+1 {
+		t.Fatal("the typing example did not advance one tick on F7")
+	}
+	return d.Screenshot()
+}
+
+func requirePartialBoard(t *testing.T, frame *image.RGBA) {
+	t.Helper()
+	if got := frame.RGBAAt(2, boardTop); got != background {
+		t.Errorf("at the start of motion the top edge is %v, want the background", got)
+	}
+	if got := frame.RGBAAt(2, height-10); got == background {
+		t.Error("at the start of motion the bottom of the board should be visible")
+	}
 }
 
 // inked counts the pixels of the text's colour above the keyboard.

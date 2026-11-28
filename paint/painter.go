@@ -23,6 +23,7 @@ type Painter struct {
 	keys   []osk.PlacedKey
 	glyphs []labelGlyph
 	ink    image.Rectangle
+	board  *ebiten.Image
 }
 
 // New is a painter of the theme. A theme with no font draws its labels in the stock themes'
@@ -57,17 +58,47 @@ func (p *Painter) SetTheme(theme Theme) {
 	p.theme = theme
 }
 
-// Draw draws the keyboard on dst, where its rectangle says. A hidden keyboard is not drawn.
+// Draw draws the keyboard on dst. During a transition the board slides and fades
+// within its rectangle.
 func (p *Painter) Draw(dst *ebiten.Image, keyboard *osk.Keyboard) {
-	if !keyboard.Shown() || keyboard.Rect().Empty() {
+	rect, visibility := keyboard.Rect(), keyboard.Visibility()
+	if visibility == 0 || rect.Empty() {
+		return
+	}
+	if visibility == 1 {
+		p.drawBoard(dst, keyboard, image.Point{})
 		return
 	}
 
+	board := p.transitionImage(rect.Size())
+	p.drawBoard(board, keyboard, rect.Min)
+
+	// Fade the panel and keys together, then clip the image at the lower edge.
+	options := ebiten.DrawImageOptions{Filter: ebiten.FilterLinear}
+	options.GeoM.Translate(float64(rect.Min.X), float64(rect.Min.Y)+float64(rect.Dy())*(1-visibility))
+	options.ColorScale.ScaleAlpha(float32(visibility))
+	dst.SubImage(rect).(*ebiten.Image).DrawImage(board, &options)
+}
+
+func (p *Painter) transitionImage(size image.Point) *ebiten.Image {
+	if p.board != nil && p.board.Bounds().Size() != size {
+		p.board.Deallocate()
+		p.board = nil
+	}
+	if p.board == nil {
+		p.board = ebiten.NewImage(size.X, size.Y)
+	}
+	p.board.Clear()
+	return p.board
+}
+
+func (p *Painter) drawBoard(dst *ebiten.Image, keyboard *osk.Keyboard, origin image.Point) {
 	p.shapes.SetColor(p.theme.Palette.Panel)
-	p.shapes.DrawIntRect(dst, keyboard.Rect())
+	p.shapes.DrawIntRect(dst, keyboard.Rect().Sub(origin))
 
 	p.keys = keyboard.AppendKeys(p.keys[:0])
 	for _, key := range p.keys {
+		key.Rect = key.Rect.Sub(origin)
 		p.drawKey(dst, key)
 	}
 }

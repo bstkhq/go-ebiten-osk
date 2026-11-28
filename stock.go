@@ -50,6 +50,9 @@ var stock = map[Locale]struct {
 	compact func() Layout
 	full    func(Kind, FieldAction) Layout
 }{
+	FrFR: {compactFrFR, fullFrFR},
+	PtPT: {compactPtPT, fullPtPT},
+	CaES: {compactCaES, fullCaES},
 	EnUS: {compactEnUS, fullEnUS},
 	EsES: {compactEsES, fullEsES},
 	EnGB: {compactEnGB, fullEnGB},
@@ -158,7 +161,9 @@ func positionsEsES() Positions {
 	})
 }
 
-func withLettersAndDigits(positions Positions) Positions {
+func withLettersAndDigits(base Positions) Positions {
+	positions := make(Positions, len(base)+52+10)
+	maps.Copy(positions, base)
 	for letter := 'a'; letter <= 'z'; letter++ {
 		key := ebiten.KeyA + ebiten.Key(letter-'a')
 		positions[letter] = key

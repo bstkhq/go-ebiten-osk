@@ -15,16 +15,21 @@ func TestTheExampleCyclesLocalesAndWrapsOncePerPress(t *testing.T) {
 	d.Type("name")
 	locales := osk.StockLocales()
 	start := slices.Index(locales, osk.EnUS)
-	for step := 1; step <= len(locales); step++ {
-		locale := locales[(start+step)%len(locales)]
-		d.Hold(4, ebiten.KeyF1)
-		d.WithGame(func(ebitenGame ebiten.Game) {
-			g := ebitenGame.(*game)
-			if g.active != 1 || string(g.values[1]) != "name" {
-				t.Errorf("locale switch left field %d active and email text %q", g.active, g.values[1])
-			}
-			checkVisibleStockLayout(t, g, locale, osk.Full, osk.KindEmail, osk.ActionNext)
-		})
+	for _, form := range []osk.Form{osk.Full, osk.Compact} {
+		if form == osk.Compact {
+			d.Tap(ebiten.KeyF3)
+		}
+		for step := 1; step <= len(locales); step++ {
+			locale := locales[(start+step)%len(locales)]
+			d.Hold(4, ebiten.KeyF1)
+			d.WithGame(func(ebitenGame ebiten.Game) {
+				g := ebitenGame.(*game)
+				if g.active != 1 || string(g.values[1]) != "name" {
+					t.Errorf("locale switch left field %d active and email text %q", g.active, g.values[1])
+				}
+				checkVisibleStockLayout(t, g, locale, form, osk.KindEmail, osk.ActionNext)
+			})
+		}
 	}
 }
 

@@ -3,6 +3,7 @@ package osk
 import (
 	"image"
 	"math"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 )
@@ -11,21 +12,21 @@ import (
 // occupies, and every [Keyboard.Update] turns the pointers on its keys into key presses and
 // typed text for its input. It draws nothing. Make one with [New].
 type Keyboard struct {
-	rect     image.Rectangle
-	hidden   bool
-	pointers Pointers
-	input    *Input
-	write    InputWriter
+	rect      image.Rectangle
+	animation animation
+	pointers  Pointers
+	input     *Input
+	write     InputWriter
 
 	// updated is the tick of the last update. A keyboard listens for landings from one
 	// update to the next: a pointer it finds down after a tick without an update came down
 	// while it was not listening, and presses nothing.
 	updated int64
 
-	layers   []resolvedLayer
-	layer    int
-	shift    State
-	replaced bool // The next update releases holds on the previous layout.
+	layers       []resolvedLayer
+	layer        int
+	shift        State
+	releaseHolds bool // The next update releases holds after Hide or SetLayout.
 
 	// landed records each pointer's ownership and the key it still holds, if any.
 	landed map[PointerID]landing
@@ -91,10 +92,11 @@ func (s State) String() string { return named("State", int(s), "idle", "pressed"
 type Option func(*options)
 
 type options struct {
-	pointers Pointers
-	input    *Input
-	repeat   eraseRepeat
-	write    InputWriter
+	pointers  Pointers
+	input     *Input
+	repeat    eraseRepeat
+	write     InputWriter
+	animation time.Duration
 }
 
 // WithPointers makes the keyboard read its pointers from somewhere other than Ebitengine's
@@ -129,7 +131,7 @@ func New(layout Layout, opts ...Option) (*Keyboard, error) {
 		return nil, err
 	}
 
-	o := options{repeat: eraseRepeat{delay: 30, interval: 6}}
+	o := options{repeat: eraseRepeat{delay: 30, interval: 6}, animation: DefaultAnimationDuration}
 	for _, opt := range opts {
 		opt(&o)
 	}
@@ -145,6 +147,7 @@ func New(layout Layout, opts ...Option) (*Keyboard, error) {
 	k := &Keyboard{
 		pointers: o.pointers, input: o.input, write: o.write, updated: never,
 		layers: layers, landed: make(map[PointerID]landing), repeat: o.repeat,
+		animation: animation{duration: o.animation, ticks: 1, step: 1, target: 1},
 	}
 	k.place()
 
@@ -162,7 +165,7 @@ func (k *Keyboard) SetLayout(layout Layout) error {
 	}
 
 	k.layers, k.layer, k.shift = layers, 0, StateIdle
-	k.replaced = true
+	k.releaseHolds = true
 	k.place()
 	return nil
 }
@@ -180,20 +183,22 @@ func (k *Keyboard) Rect() image.Rectangle {
 	return k.rect
 }
 
-// Show brings the keyboard back after [Keyboard.Hide].
+// Show brings the keyboard back, reversing an ongoing hide from its current
+// position. The keyboard accepts key presses once it is fully shown.
 func (k *Keyboard) Show() {
-	k.hidden = false
+	k.animation.aim(true)
 }
 
-// Hide takes the keyboard away. From its next update it takes no pointer, and the keys it
-// held are released.
+// Hide takes the keyboard away. Held keys are released at the start of the next
+// Update, before that update advances the transition.
 func (k *Keyboard) Hide() {
-	k.hidden = true
+	k.animation.aim(false)
+	k.releaseHolds = true
 }
 
-// Shown says whether the keyboard is on the screen.
+// Shown says whether the keyboard is showing or still on its way off screen.
 func (k *Keyboard) Shown() bool {
-	return !k.hidden
+	return k.animation.step != 0 || k.animation.target != 0
 }
 
 // AppendKeys appends the keys of the layer in view, as the keyboard holds them now, and
@@ -215,8 +220,9 @@ func (k *Keyboard) AppendEvents(events []Event) []Event {
 
 // PointerTaken reports whether id belongs to the keyboard in the current tick. The
 // keyboard takes a pointer that lands anywhere in its rectangle while shown, including
-// blank space, and keeps it through slides and through the update that sees a same-tick
-// tap. Hiding the keyboard after Update keeps its pointers taken for that tick. Call
+// blank space and during transitions, and keeps it through slides and the update
+// that sees a same-tick tap. Hiding the keyboard after Update keeps its pointers taken
+// for that tick. Once fully hidden, the next update clears ownership. Call
 // PointerTaken after Update, before handling the pointer elsewhere in the game.
 func (k *Keyboard) PointerTaken(id PointerID) bool {
 	return k.updated == k.input.tick() && k.landed[id].taken
@@ -249,9 +255,9 @@ func (k *Keyboard) Update() {
 	}
 	k.lift(listening)
 
-	if k.replaced {
+	if k.releaseHolds {
 		k.cancelLandings()
-		k.replaced = false
+		k.releaseHolds = false
 	}
 
 	if !listening {
@@ -269,6 +275,7 @@ func (k *Keyboard) Update() {
 		stock.rememberTouches(k)
 	}
 	k.repeatErase()
+	k.animation.advance()
 	k.deliver()
 }
 
@@ -299,7 +306,7 @@ func (k *Keyboard) cancelLandings() {
 // listening.
 func (k *Keyboard) lift(listening bool) {
 	for id, landed := range k.landed {
-		if !listening || k.hidden || landed.lifted || !stayedDown(k.down, id) {
+		if !listening || !k.Shown() || landed.lifted || !stayedDown(k.down, id) {
 			k.release(landed.key)
 			delete(k.landed, id)
 		}
@@ -350,7 +357,7 @@ func (k *Keyboard) land(listening bool) int {
 }
 
 func (k *Keyboard) take(pointer Pointer, listening bool) landing {
-	if k.hidden || (!listening && !pointer.Landed) {
+	if !k.Shown() || (!listening && !pointer.Landed) {
 		return landing{lifted: pointer.Lifted}
 	}
 
@@ -365,7 +372,11 @@ func (k *Keyboard) takeAt(at image.Point, lifted bool) landing {
 	if !at.In(k.rect) {
 		return landing{lifted: lifted}
 	}
-	return landing{key: k.keyAt(at), taken: true, lifted: lifted}
+	landed := landing{taken: true, lifted: lifted}
+	if k.animation.acceptsKeys() {
+		landed.key = k.keyAt(at)
+	}
+	return landed
 }
 
 func (k *Keyboard) keyAt(at image.Point) *keyState {

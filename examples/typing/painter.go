@@ -3,6 +3,7 @@ package main
 import (
 	"image"
 	"image/color"
+	"math"
 
 	osk "github.com/bstkhq/go-ebiten-osk"
 	"github.com/hajimehoshi/ebiten/v2"
@@ -23,13 +24,18 @@ type customPainter struct {
 }
 
 func (p *customPainter) Draw(dst *ebiten.Image, keyboard *osk.Keyboard) {
-	if !keyboard.Shown() {
+	visibility := keyboard.Visibility()
+	if visibility == 0 {
 		return
 	}
-	dst.SubImage(keyboard.Rect()).(*ebiten.Image).Fill(customPanel)
+	rect := keyboard.Rect()
+	offset := image.Pt(0, int(math.Round(float64(rect.Dy())*(1-visibility))))
+	dst = dst.SubImage(rect).(*ebiten.Image)
+	dst.SubImage(rect.Add(offset)).(*ebiten.Image).Fill(customPanel)
 
 	p.keys = keyboard.AppendKeys(p.keys[:0])
 	for _, key := range p.keys {
+		key.Rect = key.Rect.Add(offset)
 		p.drawKey(dst, key)
 	}
 }

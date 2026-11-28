@@ -308,6 +308,7 @@ func TestAFingerOwnsTheKeyItLandedOn(t *testing.T) {
 
 func TestAHiddenKeyboardTakesNothing(t *testing.T) {
 	b := compactBoard(t)
+	b.SetAnimationDuration(0)
 
 	b.touch(t, 1, "Q")
 	b.Update()

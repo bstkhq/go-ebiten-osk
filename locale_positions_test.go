@@ -10,7 +10,7 @@ import (
 
 func TestStockLocalesListsRegisteredBoards(t *testing.T) {
 	locales := osk.StockLocales()
-	for _, locale := range []osk.Locale{"en-US", "es-ES", "en-GB", "de-DE", "it-IT"} {
+	for _, locale := range []osk.Locale{"en-US", "es-ES", "en-GB", "de-DE", "it-IT", "fr-FR", "pt-PT", "ca-ES"} {
 		if !slices.Contains(locales, locale) {
 			t.Errorf("StockLocales() is missing %s", locale)
 		}

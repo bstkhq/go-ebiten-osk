@@ -66,6 +66,7 @@ func TestTakenPointersFollowTheLandingEvenInTheMargin(t *testing.T) {
 		t.Error("sliding across the board boundary changed which fingers were taken")
 	}
 
+	b.SetAnimationDuration(0)
 	b.Hide()
 	b.Update()
 	if b.PointerTaken(1) || b.PointerTaken(3) || !b.input.IsKeyJustReleased(ebiten.KeyQ) {
@@ -80,6 +81,7 @@ func TestTakenPointersFollowTheLandingEvenInTheMargin(t *testing.T) {
 
 func TestHidingKeepsThePointerTakenForTheRestOfItsTick(t *testing.T) {
 	b := compactBoard(t)
+	b.SetAnimationDuration(0)
 	b.touch(t, 1, "Q")
 	b.Update()
 	if b.typed() != "Q" || !b.PointerTaken(1) {
