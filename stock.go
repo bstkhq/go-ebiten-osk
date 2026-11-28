@@ -44,11 +44,11 @@ var stock = map[Locale]struct {
 	compact func() Layout
 	full    func(Kind, FieldAction) Layout
 }{
-	EnUS: {compactEnUS, fullEnUS},
-	EsES: {compactEsES, fullEsES},
 	FrFR: {compactFrFR, fullFrFR},
 	PtPT: {compactPtPT, fullPtPT},
 	CaES: {compactCaES, fullCaES},
+	EnUS: {compactEnUS, fullEnUS},
+	EsES: {compactEsES, fullEsES},
 }
 
 const (

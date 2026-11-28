@@ -20,7 +20,7 @@ func (g *game) chooseLayout() error {
 	case inpututil.IsKeyJustPressed(ebiten.KeyF6):
 		return g.selectStock(osk.EsES, osk.Full)
 	default:
-		return g.chooseAdditionalLocale()
+		return nil
 	}
 }
 
@@ -62,5 +62,4 @@ func pinPad() osk.Layout {
 
 func drawLayoutShortcuts(screen *ebiten.Image) {
 	ebitenutil.DebugPrintAt(screen, "F1  en-US compact    F3  es-ES compact    F4  PIN pad\nF5  en-US full       F6  es-ES full", 16, 36)
-	ebitenutil.DebugPrintAt(screen, "F10  fr-FR    F11  pt-PT    F12  ca-ES    (hold Shift for full)", 400, 36)
 }
