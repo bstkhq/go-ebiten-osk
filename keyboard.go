@@ -23,6 +23,7 @@ type Keyboard struct {
 
 	layers   []resolvedLayer
 	layer    int
+	shift    State
 	replaced bool // The next update releases holds on the previous layout.
 
 	// landed records each pointer's ownership and the key it still holds, if any.
@@ -147,7 +148,7 @@ func (k *Keyboard) SetLayout(layout Layout) error {
 		return err
 	}
 
-	k.layers, k.layer = layers, 0
+	k.layers, k.layer, k.shift = layers, 0, StateIdle
 	k.replaced = true
 	k.place()
 	return nil
@@ -187,7 +188,7 @@ func (k *Keyboard) Shown() bool {
 func (k *Keyboard) AppendKeys(keys []PlacedKey) []PlacedKey {
 	for _, row := range k.layers[k.layer].rows {
 		for i := range row {
-			keys = append(keys, row[i].PlacedKey)
+			keys = append(keys, k.placed(&row[i]))
 		}
 	}
 	return keys
@@ -378,9 +379,7 @@ func (k *Keyboard) press(key *keyState) {
 		k.held[position]++
 	}
 
-	if text := key.Do.text; text != "" {
-		k.events = append(k.events, Event{Kind: Text, Text: text})
-	}
+	k.activate(key)
 }
 
 // release takes one pointer off a key. The last one releases it.

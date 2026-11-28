@@ -41,18 +41,32 @@ Press F2 to cycle between the dark theme, the light theme, and the example's own
 
 ## Layouts
 
-In the typing example, press F1 for compact en-US, F3 for compact es-ES, or F4 for a
-PIN pad built from the exported layout blocks.
+In the typing example, press F1 for compact en-US, F3 for compact es-ES, F5 for
+full en-US, or F6 for full es-ES. F4 shows a PIN pad built from the exported
+layout blocks.
 
 `osk.Stock` looks up a layout by locale and form. Compact `osk.EnUS` and `osk.EsES`
 both have uppercase letters, a `123` layer with digits and punctuation, and an
 `ABC` switch back to letters. Spanish also has an `ÁÉÍ` layer.
 
-Call `Keyboard.SetLayout` to change locale or use a custom layout. Its first
+Call `Keyboard.SetLayout` to change form or locale or use a custom layout. Its first
 layer takes effect immediately, and held keys are released in the next
 `Keyboard.Update`. Call it before `Update` to read those releases in the same
 game tick. Custom layouts use a `Layer.Name` and a key with
 `osk.SwitchLayer(name)` to link layers.
+
+### Full form
+
+Ask `osk.Stock` for `osk.Full` to start with lowercase letters and a localized
+Enter key. Tap Shift once for one capital, twice for caps lock, and a third time
+to unlock. Spanish supports both cases on the accents layer. The `123` layer
+has digits and symbols.
+
+Use `osk.StockWithAction(osk.EsES, osk.Full, osk.ActionNext)` to label the action
+key «Siguiente». Enter, Next, Done, Go, Search, and Send all press `ebiten.KeyEnter`
+and emit `osk.ActionPressed`. Read `event.FieldAction` from `Keyboard.AppendEvents`
+to handle the selected action. Custom layouts can use `osk.Shift()` and
+`osk.Submit(...)` for these keys.
 
 ## Customize the keyboard
 
@@ -129,11 +143,11 @@ pointer sources handle duplicate reports themselves.
 
 Early. What works today:
 
-- compact en-US and es-ES boards, typed with fingers or the mouse;
+- compact and full en-US and es-ES boards, typed with fingers or the mouse;
 - the input copy, alongside the physical keyboard;
 - the stock painter with dark and light themes.
 
-Planned, in the [issues](https://github.com/bstkhq/go-ebiten-osk/issues): the full form for names and emails, more locales, and an optional hook that makes Ebitengine's own functions report the on-screen keys, for code that cannot be changed.
+Planned, in the [issues](https://github.com/bstkhq/go-ebiten-osk/issues): email and number kinds, more locales, and an optional hook that makes Ebitengine's own functions report the on-screen keys, for code that cannot be changed.
 
 Built and tested against Ebitengine v2.9.9. The API will change until the first tagged version.
 

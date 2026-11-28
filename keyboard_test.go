@@ -489,8 +489,8 @@ func TestAnUnknownStockLayoutIsAnError(t *testing.T) {
 		t.Error("a locale with no stock layout was accepted")
 	}
 
-	if _, err := osk.Stock(osk.EnUS, osk.Full); err == nil {
-		t.Error("a form with no stock layout yet was accepted")
+	if _, err := osk.Stock(osk.EnUS, osk.Form(-1)); err == nil {
+		t.Error("an unknown form was accepted")
 	}
 }
 
