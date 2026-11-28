@@ -6,10 +6,7 @@ import (
 	"unicode/utf8"
 )
 
-const (
-	fullControlWidth     = 1.5
-	fullSymbolEraseWidth = 1
-)
+const fullControlWidth = 1.5
 
 type fullLocale struct {
 	letterRows, symbolRows, accentRows [3]string
@@ -75,12 +72,11 @@ func (locale fullLocale) fullLayers(kind Kind, erase, submit Key) []Layer {
 
 	grid := locale.grid()
 	letterBottom := grid.row(letterControls, nil, letterTail)
-	symbolBottom := grid.row(symbolControls, nil, tail)
-	symbolErase := erase
-	symbolErase.Weight = fullSymbolEraseWidth
+	symbolRows, extra := grid.splitSymbols(locale.symbolRows)
+	symbolBottom := grid.row(symbolControls, nil, append(extra, tail...))
 	layers := []Layer{
 		grid.layer(letters, locale.letterRows, letterBottom, []Key{shift}, erase),
-		grid.layer(digits, locale.symbolRows, symbolBottom, nil, symbolErase),
+		grid.layer(digits, symbolRows, symbolBottom, nil, erase),
 	}
 	if withAccents {
 		accentBottom := grid.row([]Key{toLetters, toDigits}, nil, tail)
@@ -135,8 +131,16 @@ type fullGrid struct {
 func (locale fullLocale) grid() fullGrid {
 	slots := func(row string) float64 { return float64(utf8.RuneCountInString(row)) }
 	letterSpan := max(stockRowWidth, slots(locale.letterRows[0]), slots(locale.letterRows[2])+2*fullControlWidth)
-	width := max(letterSpan, slots(locale.letterRows[1]), slots(locale.symbolRows[1]), slots(locale.symbolRows[2])+fullSymbolEraseWidth)
+	width := max(letterSpan, slots(locale.letterRows[1]), slots(locale.symbolRows[1]))
 	return fullGrid{width: width, letterSpan: letterSpan}
+}
+
+// splitSymbols moves any symbols that would crowd erase to the bottom row.
+func (grid fullGrid) splitSymbols(rows [3]string) ([3]string, []Key) {
+	third := []rune(rows[2])
+	split := min(len(third), int(grid.letterSpan-fullControlWidth))
+	rows[2] = string(third[:split])
+	return rows, characters(string(third[split:]), grid.width)
 }
 
 type fullRow struct {

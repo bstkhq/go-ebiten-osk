@@ -96,9 +96,11 @@ return keyboard.SetLayout(layout)
 letters layer, Text has a comma immediately to the left of Space and Email
 has **@** in the same slot. The period stays on the right. Space spans four
 letter slots, and `123`, Shift, erase and the field action span one and a half
-slots each. Short rows leave space around keys. German uses eleven slots
-across the letters layer, while Catalan and British English center their
-ten-slot rows on an eleven-slot grid to fit longer rows elsewhere.
+slots each. Extra symbols sit beside Space on the digits and symbols layer
+to keep erase at the same width. Short rows leave space around keys.
+German uses eleven slots across the letters layer, while Catalan and
+British English center ten-slot rows on an eleven-slot grid to fit longer
+rows elsewhere.
 
 Compact email uses the compact text layout.
 `osk.KindNumber` gives both forms a localized pad with ten digits, erase, and

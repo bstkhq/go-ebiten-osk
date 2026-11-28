@@ -129,7 +129,7 @@ func TestAdditionalFullLocaleLayers(t *testing.T) {
 
 				switchLayer(t, b, "123")
 				bottom[0] = "ABC"
-				checkFullLayer(t, b, fullRows(locale.symbols, bottom, "", locale.erase), locale.space, locale.erase, locale.positions)
+				checkFullLayer(t, b, fullSymbolRows(locale.symbols, bottom, "<", locale.erase), locale.space, locale.erase, locale.positions)
 				checkFullReturn(t, b, home, locale.letters[0][:1])
 
 				switchLayer(t, b, locale.accent)

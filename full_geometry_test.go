@@ -57,7 +57,7 @@ func checkFullLetterGrid(t *testing.T, b board, context string) float64 {
 		if key.Role() == osk.RoleControl {
 			controls = append(controls, key.Rect)
 		}
-		checkFullKeyWidth(t, key, pitch, false)
+		checkFullKeyWidth(t, key, pitch)
 	}
 
 	digits, action := b.key(t, "123").Rect, roleKey(t, b, osk.RoleAction)
@@ -88,27 +88,25 @@ func checkFullLayerWidths(t *testing.T, b board, pitch float64) {
 	t.Helper()
 	switchLayer(t, b, "123")
 	for _, key := range b.AppendKeys(nil) {
-		checkFullKeyWidth(t, key, pitch, true)
+		checkFullKeyWidth(t, key, pitch)
 	}
 	for _, key := range b.AppendKeys(nil) {
 		if key.Role() == osk.RoleLayerSwitch && key.Face() != "ABC" {
 			switchLayer(t, b, key.Face())
 			for _, accentKey := range b.AppendKeys(nil) {
-				checkFullKeyWidth(t, accentKey, pitch, false)
+				checkFullKeyWidth(t, accentKey, pitch)
 			}
 			break
 		}
 	}
 }
 
-func checkFullKeyWidth(t *testing.T, key osk.PlacedKey, pitch float64, symbols bool) {
+func checkFullKeyWidth(t *testing.T, key osk.PlacedKey, pitch float64) {
 	t.Helper()
 	want := 1.0
 	switch {
 	case key.Role() == osk.RoleSpace:
 		want = 4
-	case symbols && key.Icon == osk.IconErase:
-		want = 1
 	case key.Role() == osk.RoleControl || key.Role() == osk.RoleAction:
 		want = 1.5
 	case key.Role() == osk.RoleLayerSwitch && (key.Face() == "ABC" || key.Face() == "123"):
