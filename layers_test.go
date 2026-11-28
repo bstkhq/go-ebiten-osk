@@ -239,9 +239,18 @@ func TestSwitchingLayersReleasesOldHoldsAndKeepsPointersDetached(t *testing.T) {
 	b.Update()
 	b.key(t, "1") // Both landed on the letters. The first switch won.
 	checkRelease(t, b, ebiten.KeyQ)
+	for _, id := range []osk.PointerID{1, 2, 3, 4} {
+		if !b.PointerTaken(id) {
+			t.Errorf("the layer switch gave up pointer %d before lift", id)
+		}
+	}
 
+	b.lift(2)
 	b.reland(t, 1, "1")
 	b.Update()
+	if b.PointerTaken(2) {
+		t.Error("the pointer stayed taken after lifting")
+	}
 	if b.typed() != "1" || !b.input.IsKeyJustPressed(ebiten.KeyDigit1) {
 		t.Errorf("a fresh landing typed %q and pressed %v", b.typed(), b.input.AppendJustPressedKeys(nil))
 	}
@@ -269,6 +278,9 @@ func TestAValidReplacementShowsFirstLayerAtOnceAndReleasesOnUpdate(t *testing.T)
 	}
 	b.Update()
 	checkRelease(t, b, ebiten.KeyDigit1)
+	if !b.PointerTaken(4) {
+		t.Error("the layout replacement gave up the pointer before lift")
+	}
 
 	b.reland(t, 4, "Ñ")
 	b.Update()
