@@ -127,13 +127,10 @@ func (g *game) Update() error {
 
 	// Apply the action after editing the current field. The same on-screen
 	// press also appears as Enter in either input mode.
-	if len(g.actions) > 0 {
-		return g.handleAction(g.actions[0])
+	if len(g.actions) == 0 && justPressed(ebiten.KeyEnter) {
+		g.queueAction(fields[g.active].action)
 	}
-	if justPressed(ebiten.KeyEnter) {
-		return g.handleAction(fields[g.active].action)
-	}
-	return nil
+	return g.handleActions()
 }
 
 func (g *game) cycleLook() {

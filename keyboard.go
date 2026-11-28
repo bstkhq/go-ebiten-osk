@@ -39,6 +39,8 @@ type Keyboard struct {
 	// physical positions in it.
 	events  []Event
 	changes []change
+	// writerEvents keeps the writer's borrowed copy separate from events.
+	writerEvents []Event
 
 	// held counts the keys pressed at each physical position: two keys of a layer may stand
 	// for one position, which goes down with the first and up with the last.
@@ -113,8 +115,8 @@ func WithInput(input *Input) Option {
 	return func(o *options) { o.input = input }
 }
 
-// InputWriter receives a keyboard's held physical positions and events after
-// each update. The events are valid only for the duration of the call.
+// InputWriter receives a keyboard's held physical positions and a copy of its
+// events after each update. The copy is valid only for the duration of the call.
 type InputWriter func(held [ebiten.KeyMax + 1]bool, events []Event)
 
 // WithInputWriter sends a keyboard's updates to writer in place of the input
@@ -292,7 +294,8 @@ func (k *Keyboard) deliver() {
 	for key, fingers := range k.held {
 		held[key] = fingers > 0
 	}
-	k.write(held, k.events)
+	k.writerEvents = append(k.writerEvents[:0], k.events...)
+	k.write(held, k.writerEvents)
 }
 
 // cancelLandings releases keys from the departing layer. A pointer that stays down

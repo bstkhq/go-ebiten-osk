@@ -26,7 +26,9 @@ func Submit(action FieldAction) Action {
 }
 
 // WithActionHandler calls handler once per on-screen action key activation,
-// in event order, at the end of [Keyboard.Update] after publishing input.
+// in event order, at the end of [Keyboard.Update] after it feeds the input
+// copy or calls the [InputWriter]. A hook still needs its own update before
+// the game reads Ebitengine input.
 // The handler may change the layout or visibility for subsequent updates.
 // A nil handler disables the callback. ActionPressed events and Enter input
 // are still emitted, and physical Enter is read through the usual input API.

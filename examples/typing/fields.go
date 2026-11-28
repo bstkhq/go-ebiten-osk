@@ -67,10 +67,21 @@ func (g *game) queueAction(action osk.FieldAction) {
 	g.actions = append(g.actions, action)
 }
 
+func (g *game) handleActions() error {
+	for _, action := range g.actions {
+		if err := g.handleAction(action); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (g *game) handleAction(action osk.FieldAction) error {
 	switch action {
 	case osk.ActionNext:
-		return g.focus(g.active + 1)
+		if g.active+1 < len(fields) {
+			return g.focus(g.active + 1)
+		}
 	case osk.ActionDone:
 		g.submissions++
 	}

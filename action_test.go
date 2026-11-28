@@ -82,3 +82,33 @@ func TestActionHandlerCanReplaceTheLayoutAndHideTheKeyboard(t *testing.T) {
 		t.Error("the handler did not hide the keyboard")
 	}
 }
+
+func TestInputWriterCanProcessItsEventsWithoutChangingActions(t *testing.T) {
+	layout, err := osk.StockWithAction(osk.EnUS, osk.Full, osk.ActionNext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var actions []osk.FieldAction
+	var written []osk.Event
+	b := newBoard(t, layout,
+		osk.WithInputWriter(func(_ [ebiten.KeyMax + 1]bool, events []osk.Event) {
+			written = append(written, events...)
+			clear(events)
+		}),
+		osk.WithActionHandler(func(action osk.FieldAction) {
+			actions = append(actions, action)
+		}),
+	)
+	b.touch(t, 1, "Next")
+	b.Update()
+	if want := []osk.FieldAction{osk.ActionNext}; !slices.Equal(actions, want) {
+		t.Errorf("callback actions = %v, want %v", actions, want)
+	}
+	want := []osk.Event{
+		{Kind: osk.KeyDown, Key: ebiten.KeyEnter},
+		{Kind: osk.ActionPressed, FieldAction: osk.ActionNext},
+	}
+	if got := b.AppendEvents(nil); !slices.Equal(got, want) || !slices.Equal(written, want) {
+		t.Errorf("keyboard events = %v, writer events = %v, want %v in each", got, written, want)
+	}
+}
