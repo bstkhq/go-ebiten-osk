@@ -1,7 +1,7 @@
-// Command typing shows the on-screen keyboard typing a line of text.
+// Command typing shows the on-screen keyboard in three kinds of field.
 //
-// The game reads its keyboard through the input copy, so the keys on the screen and the keys of
-// the physical keyboard both type:
+// The game normally reads through the input copy. Pass -hook to read both the
+// on-screen and physical keyboards through Ebitengine.
 //
 //	go run github.com/bstkhq/go-ebiten-osk/examples/typing@latest
 package main
@@ -32,15 +32,19 @@ var (
 	ink        = color.RGBA{0xf1, 0xf2, 0xf4, 0xff}
 )
 
-// game is a line of text and the keyboard that types it.
+// game is a form and the keyboard that types into its fields.
 type game struct {
-	keyboard *osk.Keyboard
-	painter  *paint.Painter
-	custom   customPainter
-	look     int
-	text     *etxt.Renderer
-	line     []rune
-	input    typingInput
+	keyboard                 *osk.Keyboard
+	painter                  *paint.Painter
+	custom                   customPainter
+	look                     int
+	text                     *etxt.Renderer
+	values                   [len(fields)][]rune
+	active                   int
+	locale                   osk.Locale
+	preferredForm            osk.Form
+	touches, previousTouches []ebiten.TouchID
+	input                    typingInput
 }
 
 func newGame(useHook bool) (*game, error) {
@@ -61,11 +65,13 @@ func newGame(useHook bool) (*game, error) {
 	keyboard.SetRect(image.Rect(0, boardTop, width, height))
 
 	return &game{
-		keyboard: keyboard,
-		painter:  paint.New(paint.Dark()),
-		custom:   customPainter{text: newText(19)},
-		text:     newText(48),
-		input:    input,
+		keyboard:      keyboard,
+		painter:       paint.New(paint.Dark()),
+		custom:        customPainter{text: newText(19)},
+		text:          newText(24),
+		locale:        osk.EnUS,
+		preferredForm: osk.Compact,
+		input:         input,
 	}, nil
 }
 
@@ -84,6 +90,9 @@ func newText(size float64) *etxt.Renderer {
 }
 
 func (g *game) Update() error {
+	if err := g.chooseField(); err != nil {
+		return err
+	}
 	if err := g.chooseLayout(); err != nil {
 		return err
 	}
@@ -94,12 +103,22 @@ func (g *game) Update() error {
 		g.cycleLook()
 	}
 
+	value := g.values[g.active]
 	if justPressed(ebiten.KeyBackspace) {
-		g.line = g.line[:max(len(g.line)-1, 0)]
+		value = value[:max(len(value)-1, 0)]
 	}
+	g.values[g.active] = appendChars(value)
 
-	g.line = appendChars(g.line)
+	if justPressed(ebiten.KeyEnter) {
+		return g.advanceField()
+	}
+	return nil
+}
 
+func (g *game) advanceField() error {
+	if fields[g.active].action == osk.ActionNext && g.active+1 < len(fields) {
+		return g.focus(g.active + 1)
+	}
 	return nil
 }
 
@@ -115,7 +134,7 @@ func (g *game) cycleLook() {
 
 func (g *game) Draw(screen *ebiten.Image) {
 	screen.Fill(background)
-	g.text.Draw(screen, string(g.line)+"_", width/2, boardTop/2)
+	g.drawFields(screen)
 	ebitenutil.DebugPrintAt(screen, "F2  Keyboard appearance", 16, 16)
 	drawLayoutShortcuts(screen)
 	if g.look == 2 {

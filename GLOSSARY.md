@@ -17,7 +17,7 @@ How much keyboard is offered: compact, a small board of letters and a few contro
 _Avoid_: size, mode, variant
 
 **Layout**:
-The layers and physical positions of a keyboard. A stock layout serves one locale in one form.
+The layers and physical positions of a keyboard. A stock layout is selected by locale, form and kind.
 _Avoid_: keymap, board definition
 
 **Layer**:

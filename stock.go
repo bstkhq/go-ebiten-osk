@@ -11,30 +11,40 @@ func Stock(locale Locale, form Form) (Layout, error) {
 	return StockWithAction(locale, form, ActionEnter)
 }
 
-// StockWithAction looks up a stock layout with the requested field action. Compact
-// layouts have no action key.
+// StockWithAction looks up a stock text layout with the requested field action.
+// Compact text layouts have no action key.
 func StockWithAction(locale Locale, form Form, action FieldAction) (Layout, error) {
+	return StockWithKind(locale, form, KindText, action)
+}
+
+// StockWithKind looks up a stock layout for the field. Full email layouts show
+// @ on the letters layer. Compact email uses the compact text layout. Number
+// uses the same localized pad in either form. Pass the layout to [New] or
+// [Keyboard.SetLayout] to select the kind for a keyboard.
+func StockWithKind(locale Locale, form Form, kind Kind, action FieldAction) (Layout, error) {
 	if !action.valid() {
 		return Layout{}, fmt.Errorf("osk: unknown field action %v", action)
 	}
-	build, ok := stock[stockKey{locale, form}]
-	if !ok {
+	if kind > KindNumber {
+		return Layout{}, fmt.Errorf("osk: unknown kind %d", kind)
+	}
+	build, ok := stock[locale]
+	if !ok || (form != Compact && form != Full) {
 		return Layout{}, fmt.Errorf("osk: no stock %v layout for the locale %q", form, locale)
 	}
 
-	return build(action), nil
+	if form == Compact && kind != KindNumber {
+		return build.compact(), nil
+	}
+	return build.full(kind, action), nil
 }
 
-type stockKey struct {
-	locale Locale
-	form   Form
-}
-
-var stock = map[stockKey]func(FieldAction) Layout{
-	{EnUS, Compact}: compactEnUS,
-	{EsES, Compact}: compactEsES,
-	{EnUS, Full}:    fullEnUS,
-	{EsES, Full}:    fullEsES,
+var stock = map[Locale]struct {
+	compact func() Layout
+	full    func(Kind, FieldAction) Layout
+}{
+	EnUS: {compactEnUS, fullEnUS},
+	EsES: {compactEsES, fullEsES},
 }
 
 const (
@@ -43,7 +53,7 @@ const (
 	accents = "accents"
 )
 
-func compactEnUS(FieldAction) Layout {
+func compactEnUS() Layout {
 	space := Key{Do: Type(" "), Label: "Space", Weight: 5}
 	erase := Key{Do: Erase(), Label: "Delete", Weight: 3}
 
@@ -58,7 +68,7 @@ func compactEnUS(FieldAction) Layout {
 	}
 }
 
-func compactEsES(FieldAction) Layout {
+func compactEsES() Layout {
 	space := Key{Do: Type(" "), Label: "Espacio", Weight: 4}
 	erase := Key{Do: Erase(), Label: "Borrar", Weight: 2}
 	toLetters := layerSwitch(letters, "ABC")
