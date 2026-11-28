@@ -27,13 +27,14 @@ type game struct {
 	board   *osk.Keyboard
 	hook    *Hook
 	startup error
+	key     ebiten.Key
 	reads   []reading
 	copy    []reading
 	events  []osk.Event
 	pause   bool
 }
 
-func newGame() ebiten.Game { return &game{} }
+func newGame() ebiten.Game { return &game{key: ebiten.KeyH} }
 
 func TestMain(m *testing.M) { driver.RunTests(m, newGame) }
 
@@ -62,14 +63,13 @@ func (g *game) Update() error {
 	if g.hook != nil {
 		g.hook.Update()
 	}
-	const h = ebiten.KeyH
 	g.reads = append(g.reads, reading{
-		ebiten.IsKeyPressed(h), inpututil.IsKeyJustPressed(h), inpututil.IsKeyJustReleased(h),
-		inpututil.KeyPressDuration(h), string(ebiten.AppendInputChars(nil)),
+		ebiten.IsKeyPressed(g.key), inpututil.IsKeyJustPressed(g.key), inpututil.IsKeyJustReleased(g.key),
+		inpututil.KeyPressDuration(g.key), string(ebiten.AppendInputChars(nil)),
 	})
 	g.copy = append(g.copy, reading{
-		osk.IsKeyPressed(h), osk.IsKeyJustPressed(h), osk.IsKeyJustReleased(h),
-		osk.KeyPressDuration(h), string(osk.AppendInputChars(nil)),
+		osk.IsKeyPressed(g.key), osk.IsKeyJustPressed(g.key), osk.IsKeyJustReleased(g.key),
+		osk.KeyPressDuration(g.key), string(osk.AppendInputChars(nil)),
 	})
 	return nil
 }
@@ -182,6 +182,44 @@ func TestMouseTapCanPressAndReleaseInOneTick(t *testing.T) {
 	want := reading{pressed: true, justPressed: true, justReleased: true, text: "H"}
 	if !slices.Contains(reads, want) || reads[len(reads)-1] != (reading{}) {
 		t.Errorf("tap did not press, type and release in one tick: %v", reads)
+	}
+}
+
+func TestHeldEraseRepeatsThroughEbitengine(t *testing.T) {
+	d := driver.T(t)
+	at := keyCenter(t, d, "Delete")
+	d.WithGame(func(running ebiten.Game) {
+		g := running.(*game)
+		g.key = ebiten.KeyBackspace
+		g.reads, g.copy = nil, nil
+	})
+
+	input := d.Runtime().Injector()
+	input.SetTouches([]driver.Touch{{ID: 7, X: at.X, Y: at.Y}})
+	d.Tick(38)
+	input.SetTouches(nil)
+	d.Tick(3)
+
+	reads, copy, _ := observed(t, d)
+	start := slices.Index(reads, reading{pressed: true, justPressed: true, duration: 1})
+	if start < 0 || start+36 >= len(reads) {
+		t.Fatalf("missing a long Backspace hold: %v", reads)
+	}
+	for age, got := range reads[start+1 : start+37] {
+		elapsed := age + 1
+		repeat := elapsed == 30 || elapsed == 36
+		if !got.pressed || got.justPressed != repeat || got.justReleased != repeat || got.text != "" {
+			t.Errorf("after %d ticks of erase hold: %+v, want repeat %t", elapsed, got, repeat)
+		}
+		if repeat && got.duration != 1 {
+			t.Errorf("after %d ticks, repeat duration %d, want 1", elapsed, got.duration)
+		}
+	}
+	if !slices.Contains(reads[start+37:], reading{justReleased: true}) {
+		t.Errorf("lifting erase did not release Backspace: %v", reads)
+	}
+	if !slices.Equal(copy, reads) {
+		t.Errorf("input copy differs from engine: %v vs %v", copy, reads)
 	}
 }
 

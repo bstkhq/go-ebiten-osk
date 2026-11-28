@@ -1,7 +1,8 @@
 package osk
 
 import (
-	"slices"
+	"image"
+	"math"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
@@ -42,9 +43,12 @@ type Pointers interface {
 	AppendPointers(pointers []Pointer) []Pointer
 }
 
-// screen is Ebitengine's own pointers: the mouse while its left button is down, then the
-// touches.
-type screen struct{}
+// screen reads Ebitengine's own pointers. Each keyboard tracks echo matching against
+// its own pointer ownership.
+type screen struct {
+	recent [3]touchSample
+	mouse  mouseLanding
+}
 
 // mouseLanded says whether the left button went down in this tick, and mouseLifted whether it
 // is up again already: Ebitengine tells of a click that began and ended within the tick as
@@ -58,17 +62,19 @@ func mouseLifted() bool {
 		inpututil.MouseButtonPressDuration(ebiten.MouseButtonLeft) == 0
 }
 
-func (screen) AppendPointers(pointers []Pointer) []Pointer {
+func (*screen) AppendPointers(pointers []Pointer) []Pointer {
+	touches.watch()
+
+	// On a simultaneous landing the touch takes ownership before the mouse can match it.
+	for _, touch := range touches.down {
+		pointers = append(pointers, Pointer{
+			ID: PointerID(touch.id), X: touch.at.X, Y: touch.at.Y, Landed: touches.landed(touch),
+		})
+	}
+
 	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
 		x, y := ebiten.CursorPosition()
 		pointers = append(pointers, Pointer{ID: Mouse, X: x, Y: y, Landed: mouseLanded(), Lifted: mouseLifted()})
-	}
-
-	touches.watch()
-
-	for _, id := range touches.down {
-		x, y := ebiten.TouchPosition(id)
-		pointers = append(pointers, Pointer{ID: PointerID(id), X: x, Y: y, Landed: touches.landed(id)})
 	}
 
 	return pointers
@@ -87,10 +93,15 @@ type fingers struct {
 	at   int64
 	seen bool
 
-	// down are the touches down in that tick. before are those of the tick before it, known
-	// when that tick was watched too.
-	down, before []ebiten.TouchID
+	// before contains the preceding tick's contacts when it was watched, or none.
+	ids          []ebiten.TouchID
+	down, before []contact
 	known        bool
+}
+
+type contact struct {
+	id ebiten.TouchID
+	at image.Point
 }
 
 // watch takes in the touches of this tick, the first time it is asked in it.
@@ -101,16 +112,129 @@ func (f *fingers) watch() {
 	}
 
 	f.known = f.seen && now == f.at+1
-	f.before, f.down = f.down, ebiten.AppendTouchIDs(f.before[:0])
+	f.before, f.down = f.down, f.before[:0]
+	if !f.known {
+		f.before = f.before[:0]
+	}
+	f.ids = ebiten.AppendTouchIDs(f.ids[:0])
+	for _, id := range f.ids {
+		x, y := ebiten.TouchPosition(id)
+		f.down = append(f.down, contact{id: id, at: image.Pt(x, y)})
+	}
 	f.at, f.seen = now, true
 }
 
+const touchJump = 48
+
 // landed says whether the touch came down in this tick. Where the tick before was not
 // watched, it is what inpututil makes of the touch.
-func (f *fingers) landed(id ebiten.TouchID) bool {
-	if f.known {
-		return !slices.Contains(f.before, id)
+func (f *fingers) landed(touch contact) bool {
+	if !f.known {
+		return inpututil.TouchPressDuration(touch.id) == 1
+	}
+	for _, previous := range f.before {
+		if previous.id == touch.id {
+			return distance(previous.at, touch.at) > touchJump
+		}
 	}
 
-	return inpututil.TouchPressDuration(id) == 1
+	return true
+}
+
+func distance(a, b image.Point) float64 {
+	return math.Hypot(float64(a.X)-float64(b.X), float64(a.Y)-float64(b.Y))
+}
+
+const mouseEchoRadius = 12
+
+func withinMouseEcho(a, b image.Point) bool {
+	return distance(a, b) <= mouseEchoRadius
+}
+
+type mouseLanding struct {
+	at       image.Point
+	tick     int64
+	unpaired bool
+}
+
+type touchSample struct {
+	tick     int64
+	contacts []touchEcho
+}
+
+type touchEcho struct {
+	at    image.Point
+	taken bool
+}
+
+func (s *screen) rememberTouches(k *Keyboard) {
+	sample := s.recent[len(s.recent)-1]
+	sample.tick = k.updated
+	sample.contacts = sample.contacts[:0]
+	for _, touch := range touches.down {
+		sample.contacts = append(sample.contacts, touchEcho{at: touch.at, taken: k.landed[PointerID(touch.id)].taken})
+	}
+	copy(s.recent[1:], s.recent[:len(s.recent)-1])
+	s.recent[0] = sample
+}
+
+func (s *screen) matchTouch(k *Keyboard, at image.Point) (taken, matched bool) {
+	for _, touch := range touches.down {
+		if withinMouseEcho(at, touch.at) {
+			return k.landed[PointerID(touch.id)].taken, true
+		}
+	}
+	for _, sample := range s.recent {
+		if k.updated-sample.tick > int64(len(s.recent)) {
+			break
+		}
+		for _, touch := range sample.contacts {
+			if withinMouseEcho(at, touch.at) {
+				return touch.taken, true
+			}
+		}
+	}
+	return false, false
+}
+
+func (s *screen) takeMouse(k *Keyboard, at image.Point, lifted bool) landing {
+	s.mouse.unpaired = false
+	if taken, matched := s.matchTouch(k, at); matched {
+		return landing{taken: taken || at.In(k.rect), lifted: lifted}
+	}
+
+	l := k.takeAt(at, lifted)
+	s.mouse = mouseLanding{at: at, tick: k.updated, unpaired: l.taken}
+	return l
+}
+
+// adoptMouse makes a touch reported one tick after its mouse echo carry the existing
+// landing. The first report chose the key and already typed it. The finger now controls
+// its release, even if the raw mouse button stays down after the finger lifts.
+func (s *screen) adoptMouse(k *Keyboard, listening bool) {
+	if !listening || k.hidden || !s.mouse.unpaired || s.mouse.tick != k.updated-1 {
+		return
+	}
+
+	i := newTouchNear(k.down, s.mouse.at)
+	if i < 0 {
+		return
+	}
+
+	touch := &k.down[i]
+	if prior, found := k.landed[touch.ID]; found {
+		k.release(prior.key)
+	}
+	k.landed[touch.ID] = landing{key: k.landed[Mouse].key, taken: true}
+	k.landed[Mouse] = landing{taken: true}
+	touch.Landed = false // The landing already exists and continues through this sample.
+}
+
+func newTouchNear(down []Pointer, at image.Point) int {
+	for i, pointer := range down {
+		if pointer.ID != Mouse && pointer.Landed && withinMouseEcho(at, image.Pt(pointer.X, pointer.Y)) {
+			return i
+		}
+	}
+	return -1
 }
