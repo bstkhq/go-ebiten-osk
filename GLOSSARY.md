@@ -28,12 +28,16 @@ _Avoid_: page, view, level
 A key that shows a named layer of the layout.
 
 **Key**:
-One touch target of a layer. It types text, erases, or changes what the keyboard shows.
+One touch target of a layer. It can type text, erase, complete a field, or change what the keyboard shows.
 _Avoid_: button, cap
 
 **Role**:
 What a key is for. The roles are character, space, control, layer switch and action.
 _Avoid_: type, class
+
+**Field action**
+
+The next step requested by the action key for the current field, such as advancing to the next field, searching, or sending.
 
 **Kind**:
 What the text being typed is: text, an email, a number.

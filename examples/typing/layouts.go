@@ -10,18 +10,22 @@ import (
 func (g *game) chooseLayout() error {
 	switch {
 	case inpututil.IsKeyJustPressed(ebiten.KeyF1):
-		return g.showCompact(osk.EnUS)
+		return g.showStock(osk.EnUS, osk.Compact)
 	case inpututil.IsKeyJustPressed(ebiten.KeyF3):
-		return g.showCompact(osk.EsES)
+		return g.showStock(osk.EsES, osk.Compact)
 	case inpututil.IsKeyJustPressed(ebiten.KeyF4):
 		return g.keyboard.SetLayout(pinPad())
+	case inpututil.IsKeyJustPressed(ebiten.KeyF5):
+		return g.showStock(osk.EnUS, osk.Full)
+	case inpututil.IsKeyJustPressed(ebiten.KeyF6):
+		return g.showStock(osk.EsES, osk.Full)
 	default:
 		return nil
 	}
 }
 
-func (g *game) showCompact(locale osk.Locale) error {
-	layout, err := osk.Stock(locale, osk.Compact)
+func (g *game) showStock(locale osk.Locale, form osk.Form) error {
+	layout, err := osk.Stock(locale, form)
 	if err != nil {
 		return err
 	}
@@ -44,5 +48,5 @@ func pinPad() osk.Layout {
 }
 
 func drawLayoutShortcuts(screen *ebiten.Image) {
-	ebitenutil.DebugPrintAt(screen, "F1  en-US    F3  es-ES    F4  PIN pad", 16, 36)
+	ebitenutil.DebugPrintAt(screen, "F1  en-US compact    F3  es-ES compact    F4  PIN pad\nF5  en-US full       F6  es-ES full", 16, 36)
 }
