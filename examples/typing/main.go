@@ -79,6 +79,9 @@ func newText(size float64) *etxt.Renderer {
 // Update reads the keyboard exactly as a game reads a physical one, with osk in the place of
 // ebiten and inpututil.
 func (g *game) Update() error {
+	if err := g.chooseLayout(); err != nil {
+		return err
+	}
 	g.keyboard.Update()
 
 	if osk.IsKeyJustPressed(ebiten.KeyF2) {
@@ -108,6 +111,7 @@ func (g *game) Draw(screen *ebiten.Image) {
 	screen.Fill(background)
 	g.text.Draw(screen, string(g.line)+"_", width/2, boardTop/2)
 	ebitenutil.DebugPrintAt(screen, "F2  Keyboard appearance", 16, 16)
+	drawLayoutShortcuts(screen)
 	if g.look == 2 {
 		g.custom.Draw(screen, g.keyboard)
 		return

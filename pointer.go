@@ -200,7 +200,7 @@ func (s *screen) matchTouch(k *Keyboard, at image.Point) (taken, matched bool) {
 func (s *screen) takeMouse(k *Keyboard, at image.Point, lifted bool) landing {
 	s.mouse.unpaired = false
 	if taken, matched := s.matchTouch(k, at); matched {
-		return landing{key: noKey, taken: taken || at.In(k.rect), lifted: lifted}
+		return landing{taken: taken || at.In(k.rect), lifted: lifted}
 	}
 
 	l := k.takeAt(at, lifted)
@@ -226,7 +226,7 @@ func (s *screen) adoptMouse(k *Keyboard, listening bool) {
 		k.release(prior.key)
 	}
 	k.landed[touch.ID] = landing{key: k.landed[Mouse].key, taken: true}
-	k.landed[Mouse] = landing{key: noKey, taken: true}
+	k.landed[Mouse] = landing{taken: true}
 	touch.Landed = false // The landing already exists and continues through this sample.
 }
 

@@ -473,20 +473,19 @@ func TestAKeyboardGivenNoInputAndNoPointersUsesItsOwn(t *testing.T) {
 
 	// A game that passes what it has, and has nothing yet: the keyboard reads Ebitengine's
 	// pointers and feeds the input the package's functions answer from.
+	layout := stockBoard(t, osk.EnUS)
+	var err error
 	h.read(func(g *reader) {
-		layout, err := osk.Stock(osk.EnUS, osk.Compact)
-		if err != nil {
-			t.Fatal(err)
+		var keyboard *osk.Keyboard
+		keyboard, err = osk.New(layout, osk.WithInput(nil), osk.WithPointers(nil))
+		if err == nil {
+			keyboard.SetRect(image.Rect(0, 120, 640, 360))
+			g.keyboard = keyboard
 		}
-
-		keyboard, err := osk.New(layout, osk.WithInput(nil), osk.WithPointers(nil))
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		keyboard.SetRect(image.Rect(0, 120, 640, 360))
-		g.keyboard = keyboard
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	h.Tick(2)
 
 	h.Click(float64(at.X), float64(at.Y))
@@ -758,6 +757,30 @@ func TestAClosingTouchAndItsMouseEchoDoNotReachTheGame(t *testing.T) {
 
 	inject.SetTouches(nil)
 	inject.MouseUp(ebiten.MouseButtonLeft)
+	h.settle()
+}
+
+func TestAMouseLayerSwitchReleasesTheOldKeyAndKeepsTheTouchTaken(t *testing.T) {
+	h := sit(t)
+	letter, layer := h.middle("H"), h.middle("123")
+	inject := h.Runtime().Injector()
+	inject.SetTouches([]ebitenmcp.Touch{{ID: 7, X: letter.X, Y: letter.Y}})
+	h.Tick(3)
+
+	h.Move(float64(layer.X), float64(layer.Y))
+	h.inOneTick(func() { inject.MouseDown(ebiten.MouseButtonLeft) })
+	h.Tick(3)
+	h.middle("1")
+	h.read(func(g *reader) {
+		if string(g.text) != "H" || g.hDown || g.hUps != 1 ||
+			!slices.Equal(g.taken, []osk.PointerID{7, osk.Mouse}) {
+			t.Errorf("after the layer switch: typed %q, H down %t, H releases %d, taken %v",
+				string(g.text), g.hDown, g.hUps, g.taken)
+		}
+	})
+
+	inject.MouseUp(ebiten.MouseButtonLeft)
+	inject.SetTouches(nil)
 	h.settle()
 }
 

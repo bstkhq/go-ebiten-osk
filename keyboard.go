@@ -3,14 +3,13 @@ package osk
 import (
 	"image"
 	"math"
-	"slices"
 
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
 // A Keyboard is a board of keys on the screen. It holds a layout and the rectangle it
 // occupies, and every [Keyboard.Update] turns the pointers on its keys into key presses and
-// typed text for its input. It draws nothing.
+// typed text for its input. It draws nothing. Make one with [New].
 type Keyboard struct {
 	rect     image.Rectangle
 	hidden   bool
@@ -22,16 +21,11 @@ type Keyboard struct {
 	// while it was not listening, and presses nothing.
 	updated int64
 
-	// rows are the rows of the layer in view: the keyboard's own copy of them.
-	rows [][]Key
+	layers   []resolvedLayer
+	layer    int
+	replaced bool // The next update releases holds on the previous layout.
 
-	// keys are the keys of those rows, in their order, placed in the rectangle. positions is
-	// the physical position each one presses, or noPosition, worked out once from the
-	// layout; fingers counts the pointers each one holds.
-	keys      []PlacedKey
-	positions []ebiten.Key
-	fingers   []int
-
+	// landed records each pointer's ownership and the key it still holds, if any.
 	landed map[PointerID]landing
 	down   []Pointer
 
@@ -48,7 +42,7 @@ type Keyboard struct {
 }
 
 type landing struct {
-	key    int
+	key    *keyState
 	taken  bool
 	lifted bool
 }
@@ -62,10 +56,7 @@ type change struct {
 	before, pressed bool
 }
 
-const (
-	noKey      = -1
-	noPosition = ebiten.Key(-1)
-)
+const noPosition = ebiten.Key(-1)
 
 // A PlacedKey is a key as its keyboard holds it now: where it is and how it looks.
 type PlacedKey struct {
@@ -119,7 +110,8 @@ func WithInput(input *Input) Option {
 // refuses a layout that cannot work. The keyboard takes what it needs of the layout once,
 // here: changing the one it was given afterwards changes nothing.
 func New(layout Layout, opts ...Option) (*Keyboard, error) {
-	if err := layout.check(); err != nil {
+	layers, err := layout.resolve()
+	if err != nil {
 		return nil, err
 	}
 
@@ -138,22 +130,27 @@ func New(layout Layout, opts ...Option) (*Keyboard, error) {
 
 	k := &Keyboard{
 		pointers: o.pointers, input: o.input, updated: never,
-		landed: make(map[PointerID]landing), repeat: o.repeat,
+		layers: layers, landed: make(map[PointerID]landing), repeat: o.repeat,
 	}
-
-	for _, row := range layout.Layers[0].Rows {
-		k.rows = append(k.rows, slices.Clone(row))
-
-		for _, key := range row {
-			k.positions = append(k.positions, key.Do.position(layout.Positions))
-		}
-	}
-
-	k.keys = make([]PlacedKey, len(k.positions))
-	k.fingers = make([]int, len(k.positions))
 	k.place()
 
 	return k, nil
+}
+
+// SetLayout replaces the layout and immediately shows its first layer in the current
+// rectangle. It keeps the keyboard's visibility, pointers and input. At the next Update,
+// keys held on the old layout are released. Pointers already holding them must lift and
+// land again to press a key. If the layout is invalid, nothing changes.
+func (k *Keyboard) SetLayout(layout Layout) error {
+	layers, err := layout.resolve()
+	if err != nil {
+		return err
+	}
+
+	k.layers, k.layer = layers, 0
+	k.replaced = true
+	k.place()
+	return nil
 }
 
 // SetRect gives the keyboard the rectangle it occupies. Its keys fill it: the rows share its
@@ -188,7 +185,12 @@ func (k *Keyboard) Shown() bool {
 // AppendKeys appends the keys of the layer in view, as the keyboard holds them now, and
 // returns the extended slice. It is what a painter draws.
 func (k *Keyboard) AppendKeys(keys []PlacedKey) []PlacedKey {
-	return append(keys, k.keys...)
+	for _, row := range k.layers[k.layer].rows {
+		for i := range row {
+			keys = append(keys, row[i].PlacedKey)
+		}
+	}
+	return keys
 }
 
 // AppendEvents appends what the keyboard did in its last update, in the order it happened,
@@ -233,18 +235,37 @@ func (k *Keyboard) Update() {
 	}
 	k.lift(listening)
 
+	if k.replaced {
+		k.cancelLandings()
+		k.replaced = false
+	}
+
 	if !listening {
 		// What it let go of was let go of while nobody was told: the game has seen
 		// those keys go up already, and what comes now is no key pressed again.
 		k.changes = k.changes[:0]
 	}
 
-	k.land(listening)
+	if target := k.land(listening); target != k.layer {
+		k.cancelLandings()
+		k.layer = target
+		k.place()
+	}
 	if stock != nil {
 		stock.rememberTouches(k)
 	}
 	k.repeatErase()
 	k.input.feed(&k.held, k.changes, k.events)
+}
+
+// cancelLandings releases keys from the departing layer. A pointer that stays down
+// still belongs to its original landing and cannot press a key on the new layer.
+func (k *Keyboard) cancelLandings() {
+	for id, landed := range k.landed {
+		k.release(landed.key)
+		landed.key = nil
+		k.landed[id] = landed
+	}
 }
 
 // lift releases the keys of the pointers that are no longer down, or that lifted and landed
@@ -273,20 +294,38 @@ func stayedDown(down []Pointer, id PointerID) bool {
 // land presses the keys under the pointers that came down in this tick: those that say so,
 // and those the keyboard did not see in the tick before while it was listening. A pointer
 // that came down while the keyboard was hidden or not listening, or outside every key, holds
-// no key until it lifts. One that lifted again within the tick lets go at once.
-func (k *Keyboard) land(listening bool) {
+// no key until it lifts. One that lifted again within the tick lets go at once. All
+// landings hit the layer that was visible, and the first switch to another layer wins.
+func (k *Keyboard) land(listening bool) int {
+	target := k.layer
 	for _, pointer := range k.down {
 		if _, known := k.landed[pointer.ID]; known {
 			continue
 		}
 
-		k.landed[pointer.ID] = k.take(pointer, listening)
+		landed := k.take(pointer, listening)
+		key := landed.key
+		if key != nil && key.target != noLayer {
+			if target == k.layer {
+				target = key.target
+			}
+			landed.key = nil
+		} else {
+			k.press(key)
+			if landed.lifted {
+				k.release(key)
+				landed.key = nil
+			}
+		}
+
+		k.landed[pointer.ID] = landed
 	}
+	return target
 }
 
 func (k *Keyboard) take(pointer Pointer, listening bool) landing {
 	if k.hidden || (!listening && !pointer.Landed) {
-		return landing{key: noKey}
+		return landing{lifted: pointer.Lifted}
 	}
 
 	at := image.Pt(pointer.X, pointer.Y)
@@ -298,45 +337,40 @@ func (k *Keyboard) take(pointer Pointer, listening bool) landing {
 
 func (k *Keyboard) takeAt(at image.Point, lifted bool) landing {
 	if !at.In(k.rect) {
-		return landing{key: noKey, lifted: lifted}
+		return landing{lifted: lifted}
 	}
-
-	key := k.keyAt(at)
-	k.press(key)
-	if lifted {
-		k.release(key)
-		key = noKey
-	}
-	return landing{key: key, taken: true, lifted: lifted}
+	return landing{key: k.keyAt(at), taken: true, lifted: lifted}
 }
 
-func (k *Keyboard) keyAt(at image.Point) int {
-	for i, key := range k.keys {
-		if at.In(key.Rect) {
-			return i
+func (k *Keyboard) keyAt(at image.Point) *keyState {
+	for _, row := range k.layers[k.layer].rows {
+		for i := range row {
+			if at.In(row[i].Rect) {
+				return &row[i]
+			}
 		}
 	}
 
-	return noKey
+	return nil
 }
 
 // press puts one more pointer on a key. The first one presses it.
-func (k *Keyboard) press(key int) {
-	if key == noKey {
+func (k *Keyboard) press(key *keyState) {
+	if key == nil {
 		return
 	}
 
-	k.fingers[key]++
-	if k.fingers[key] > 1 {
+	key.fingers++
+	if key.fingers > 1 {
 		return
 	}
 
-	k.keys[key].State = StatePressed
-	if k.keys[key].Do.kind == erases {
+	key.State = StatePressed
+	if key.Do.kind == erases {
 		k.repeat.press(k.updated)
 	}
 
-	if position := k.positions[key]; position != noPosition {
+	if position := key.position; position != noPosition {
 		if k.held[position] == 0 {
 			k.positionDown(position)
 		}
@@ -344,28 +378,28 @@ func (k *Keyboard) press(key int) {
 		k.held[position]++
 	}
 
-	if text := k.keys[key].Do.text; text != "" {
+	if text := key.Do.text; text != "" {
 		k.events = append(k.events, Event{Kind: Text, Text: text})
 	}
 }
 
 // release takes one pointer off a key. The last one releases it.
-func (k *Keyboard) release(key int) {
-	if key == noKey {
+func (k *Keyboard) release(key *keyState) {
+	if key == nil {
 		return
 	}
 
-	k.fingers[key]--
-	if k.fingers[key] > 0 {
+	key.fingers--
+	if key.fingers > 0 {
 		return
 	}
 
-	k.keys[key].State = StateIdle
-	if k.keys[key].Do.kind == erases {
+	key.State = StateIdle
+	if key.Do.kind == erases {
 		k.repeat.held--
 	}
 
-	if position := k.positions[key]; position != noPosition {
+	if position := key.position; position != noPosition {
 		if k.held[position] == 1 {
 			k.positionUp(position)
 		}
@@ -400,32 +434,31 @@ func (k *Keyboard) changed(position ebiten.Key) *change {
 
 // place lays the rows out in the rectangle. What each key holds stays as it is.
 func (k *Keyboard) place() {
+	rows := k.layers[k.layer].rows
 	heaviest := 0.0
-	for _, row := range k.rows {
+	for _, row := range rows {
 		heaviest = math.Max(heaviest, rowWeight(row))
 	}
 
 	unit := float64(k.rect.Dx()) / heaviest
-	placed := 0
 
-	for i, row := range k.rows {
-		top := k.rect.Min.Y + k.rect.Dy()*i/len(k.rows)
-		bottom := k.rect.Min.Y + k.rect.Dy()*(i+1)/len(k.rows)
+	for i, row := range rows {
+		top := k.rect.Min.Y + k.rect.Dy()*i/len(rows)
+		bottom := k.rect.Min.Y + k.rect.Dy()*(i+1)/len(rows)
 		left := float64(k.rect.Min.X) + (heaviest-rowWeight(row))*unit/2
 
-		for _, key := range row {
+		for j := range row {
+			key := &row[j]
 			right := left + key.weight()*unit
 
-			k.keys[placed].Key = key
-			k.keys[placed].Rect = image.Rect(int(math.Round(left)), top, int(math.Round(right)), bottom)
+			key.Rect = image.Rect(int(math.Round(left)), top, int(math.Round(right)), bottom)
 
 			left = right
-			placed++
 		}
 	}
 }
 
-func rowWeight(row []Key) float64 {
+func rowWeight(row []keyState) float64 {
 	total := 0.0
 	for _, key := range row {
 		total += key.weight()
