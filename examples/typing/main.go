@@ -45,6 +45,7 @@ type game struct {
 	preferredForm            osk.Form
 	touches, previousTouches []ebiten.TouchID
 	input                    typingInput
+	visibility               keyboardVisibility
 }
 
 func newGame(useHook bool) (*game, error) {
@@ -72,6 +73,7 @@ func newGame(useHook bool) (*game, error) {
 		locale:        osk.EnUS,
 		preferredForm: osk.Compact,
 		input:         input,
+		visibility:    keyboardVisibility{shown: true, animated: true},
 	}, nil
 }
 
@@ -96,6 +98,7 @@ func (g *game) Update() error {
 	if err := g.chooseLayout(); err != nil {
 		return err
 	}
+	g.visibility.update(g.keyboard)
 	g.keyboard.Update()
 	justPressed, appendChars := g.input.readers()
 
@@ -135,6 +138,7 @@ func (g *game) cycleLook() {
 func (g *game) Draw(screen *ebiten.Image) {
 	screen.Fill(background)
 	g.drawFields(screen)
+	g.visibility.drawShortcuts(screen)
 	ebitenutil.DebugPrintAt(screen, "F2  Keyboard appearance", 16, 16)
 	drawLayoutShortcuts(screen)
 	if g.look == 2 {

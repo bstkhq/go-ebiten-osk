@@ -212,7 +212,7 @@ func (s *screen) takeMouse(k *Keyboard, at image.Point, lifted bool) landing {
 // landing. The first report chose the key and already typed it. The finger now controls
 // its release, even if the raw mouse button stays down after the finger lifts.
 func (s *screen) adoptMouse(k *Keyboard, listening bool) {
-	if !listening || k.hidden || !s.mouse.unpaired || s.mouse.tick != k.updated-1 {
+	if !listening || !k.Shown() || !s.mouse.unpaired || s.mouse.tick != k.updated-1 {
 		return
 	}
 

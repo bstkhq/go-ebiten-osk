@@ -131,6 +131,32 @@ func TestTheExampleSwitchesThemesAndTypesWithItsOwnPainter(t *testing.T) {
 	})
 }
 
+func TestTheExampleShowsAndHidesWithAndWithoutAnimation(t *testing.T) {
+	d := ebitenmcp.T(t)
+	at := image.Pt(20, boardTop+25)
+	d.Tap(ebiten.KeyF7)
+	d.Tick(15)
+	if got := d.Screenshot().RGBAAt(at.X, at.Y); got != background {
+		t.Errorf("after hiding, the board pixel is %v, want the background", got)
+	}
+
+	d.Tap(ebiten.KeyF8)
+	d.Tap(ebiten.KeyF7)
+	if got := d.Screenshot().RGBAAt(at.X, at.Y); got != paint.Dark().Palette.Key {
+		t.Errorf("after showing with animation off, the key colour is %v", got)
+	}
+	d.Tap(ebiten.KeyF7)
+	if got := d.Screenshot().RGBAAt(at.X, at.Y); got != background {
+		t.Errorf("after hiding with animation off, the board pixel is %v", got)
+	}
+	d.Tap(ebiten.KeyF8)
+	d.Tap(ebiten.KeyF7)
+	d.Tick(15)
+	if got := d.Screenshot().RGBAAt(at.X, at.Y); got != paint.Dark().Palette.Key {
+		t.Errorf("after showing with animation back on, the key colour is %v", got)
+	}
+}
+
 // inked counts the pixels of the text's colour above the keyboard.
 func inked(screen *image.RGBA) int {
 	count := 0

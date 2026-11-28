@@ -111,9 +111,29 @@ Set a layout key's `Icon` to `osk.IconShift`, `osk.IconErase`, or `osk.IconActio
 draw a shape with the stock painter. Keep a label for painters that use words.
 
 To replace the painter, call your own drawing code in the game's `Draw`. Use
-`keyboard.Shown()` and `keyboard.Rect()` for the panel, and `keyboard.AppendKeys` for each
+`keyboard.Visibility()` and `keyboard.Rect()` for the panel, and `keyboard.AppendKeys` for each
 key's rectangle, role, state, and label or icon. The example's
 [custom painter](examples/typing/painter.go) uses this same public state.
+
+## Show and hide
+
+A new keyboard starts fully shown. `Show` and `Hide` animate by default over
+200 ms (12 updates at 60 ticks per second). The stock painter slides and fades
+the whole board within its rectangle. Change the duration with
+`osk.WithAnimationDuration(duration)` at construction or
+`keyboard.SetAnimationDuration(duration)` at runtime. A positive duration is
+rounded up to whole updates at the game's configured tick rate when a
+transition starts. Without a positive tick rate, the calculation uses 60.
+A duration of zero or less disables animation and finishes any transition
+immediately.
+
+Read `keyboard.Visibility()` for the eased fraction from 0 to 1. Use it to
+move the game's layout or to animate a custom painter. `keyboard.Shown()`
+stays true until a hide finishes. Calling `Show` during a hide or `Hide` during
+a show reverses the current transition from its present position.
+
+In the typing example, press F7 to show or hide the keyboard and F8 to turn
+the animation on or off.
 
 ## How it is made
 
@@ -130,9 +150,11 @@ Update the keyboard before handling the game's own pointers. Check
 `keyboard.PointerTaken(osk.PointerID(id))` for an Ebitengine touch or
 `keyboard.PointerTaken(osk.Mouse)` for the left mouse button. A pointer that
 lands inside the shown keyboard belongs to it until it lifts, even if it lands
-in blank space or slides outside. After hiding the keyboard, its next update
-releases its keys and clears ownership. A pointer that stays down while the
-keyboard is shown again needs to lift and land to press a key.
+in blank space or slides outside. The first update after `Hide` releases its
+keys. During either transition, a pointer that lands anywhere in the board's
+rectangle is taken without pressing a key. Once fully hidden, the next update
+clears ownership. A pointer that stays down needs to lift and land on the
+fully shown keyboard to press a key.
 Changing the layer or layout releases the old keys and keeps their pointers
 taken until lift.
 
