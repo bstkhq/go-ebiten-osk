@@ -45,11 +45,20 @@ email layout and Number opens the number pad.
 
 In the typing example, press F1 for compact en-US, F3 for compact es-ES, F5 for
 full en-US, or F6 for full es-ES. F4 shows a PIN pad built from the exported
-layout blocks.
+layout blocks. F7, F8 and F9 select compact en-GB, de-DE and it-IT
+respectively. Hold Shift with one of those shortcuts for the full form.
 
 `osk.Stock` looks up a layout by locale and form. Compact `osk.EnUS` and `osk.EsES`
 both have uppercase letters, a `123` layer with digits and punctuation, and an
 `ABC` switch back to letters. Spanish also has an `ÁÉÍ` layer.
+
+British English (`osk.EnGB`) includes £ on its symbols layer. German
+(`osk.DeDE`) puts Ä, Ö, Ü and ß on its QWERTZ letters layer. Italian
+(`osk.ItIT`) has QWERTY letters and an `ÀÈÉ` accents layer. Compact
+Italian shows capitals, and full Italian switches case with Shift.
+
+The locale tables are written by hand. Physical positions were checked against
+the default boards in [xkeyboard-config](https://xkeyboard-config.freedesktop.org/doc/symbols/).
 
 Call `Keyboard.SetLayout` to change form or locale or use a custom layout. Its first
 layer takes effect immediately, and held keys are released in the next
@@ -157,7 +166,7 @@ go run github.com/bstkhq/go-ebiten-osk/examples/typing@latest -hook
 
 Early. What works today:
 
-- compact and full en-US and es-ES boards for text, email, and numbers, typed with fingers or the mouse;
+- compact and full en-US, es-ES, en-GB, de-DE and it-IT boards for text, email, and numbers, typed with fingers or the mouse;
 - the input copy, alongside the physical keyboard;
 - the stock painter with dark and light themes.
 

@@ -1,8 +1,11 @@
 package osk
 
+import "strings"
+
 type fullLocale struct {
 	letterRows, symbolRows, accentRows [3]string
 	space, shift, erase                string
+	accentLabel                        string
 	actionLabels                       [ActionSend + 1]string
 }
 
@@ -22,6 +25,7 @@ func fullEsES(kind Kind, action FieldAction) Layout {
 		letterRows:   [3]string{"qwertyuiop", "asdfghjklñ", "zxcvbnm"},
 		symbolRows:   [3]string{"1234567890", ",-_'¿?¡!@+", "`´:;()/º<"},
 		accentRows:   [3]string{"áéí", "óú", "üç"},
+		accentLabel:  "ÁÉÍ",
 		space:        "Espacio",
 		shift:        "Mayús",
 		erase:        "Borrar",
@@ -42,7 +46,7 @@ func (locale fullLocale) layout(positions Positions, kind Kind, action FieldActi
 	withAccents := locale.accentRows[0] != ""
 	controls := make([]Key, 0, 4)
 	if withAccents {
-		toAccents := layerSwitch(accents, "ÁÉÍ")
+		toAccents := layerSwitch(accents, locale.accentLabel)
 		space.Weight -= toAccents.weight()
 		controls = append(controls, toAccents)
 	}
@@ -55,8 +59,7 @@ func (locale fullLocale) layout(positions Positions, kind Kind, action FieldActi
 	letterControls = append(letterControls, emailSpace, dot, submit)
 	symbolControls := append([]Key{toLetters}, controls...)
 	symbolControls = append(symbolControls, space, dot, submit)
-	// The symbols row uses a one-unit erase key to keep its nine symbols aligned
-	// with the ten units of the other rows.
+	// Erase on the symbols layer uses the same width as a symbol.
 	symbolErase := erase
 	symbolErase.Weight = 1
 	layers := []Layer{
@@ -65,6 +68,34 @@ func (locale fullLocale) layout(positions Positions, kind Kind, action FieldActi
 	}
 	if withAccents {
 		layers = append(layers, fullLayer(accents, locale.accentRows, []Key{toLetters, toDigits, space, dot, submit}, []Key{shift}, erase))
+	}
+	return Layout{Layers: layers, Positions: positions}
+}
+
+func (locale fullLocale) compact(positions Positions) Layout {
+	space := Key{Do: Type(" "), Label: locale.space, Weight: 5}
+	erase := Key{Do: Erase(), Label: locale.erase, Weight: 3}
+	toLetters, toDigits := layerSwitch(letters, "ABC"), layerSwitch(digits, "123")
+	var accentsControl []Key
+	withAccents := locale.accentRows[0] != ""
+	if withAccents {
+		toAccents := layerSwitch(accents, locale.accentLabel)
+		space.Weight -= toAccents.weight()
+		accentsControl = []Key{toAccents}
+	}
+	letterControls := append(append([]Key{toDigits}, accentsControl...), space, erase)
+	symbolControls := append(append([]Key{toLetters}, accentsControl...), space, erase)
+	locale.symbolRows[1] = "." + locale.symbolRows[1]
+	for row := range locale.letterRows {
+		locale.letterRows[row] = strings.ToUpper(locale.letterRows[row])
+		locale.accentRows[row] = strings.ToUpper(locale.accentRows[row])
+	}
+	layers := []Layer{
+		compactLayer(letters, locale.letterRows, letterControls...),
+		compactLayer(digits, locale.symbolRows, symbolControls...),
+	}
+	if withAccents {
+		layers = append(layers, compactLayer(accents, locale.accentRows, toLetters, toDigits, space, erase))
 	}
 	return Layout{Layers: layers, Positions: positions}
 }
@@ -79,8 +110,12 @@ func numberPad(positions Positions, erase, submit Key) Layout {
 }
 
 func fullLayer(name string, rows [3]string, bottom, thirdStart []Key, erase Key) Layer {
-	third := append(thirdStart, characters(rows[2])...)
+	thirdWidth := stockRowWidth - erase.weight()
+	for _, control := range thirdStart {
+		thirdWidth -= control.weight()
+	}
+	third := append(thirdStart, characters(rows[2], thirdWidth)...)
 	return Layer{Name: name, Rows: [][]Key{
-		characters(rows[0]), characters(rows[1]), append(third, erase), bottom,
+		characters(rows[0], stockRowWidth), characters(rows[1], stockRowWidth), append(third, erase), bottom,
 	}}
 }

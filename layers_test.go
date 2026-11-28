@@ -56,6 +56,7 @@ func TestCompactLayersTypeAndReturnToLetters(t *testing.T) {
 		space, erase         string
 		letters, punctuation string
 		auxiliary            []string
+		accentLabel, accents string
 		positions            map[rune]ebiten.Key
 	}{
 		{
@@ -72,13 +73,29 @@ func TestCompactLayersTypeAndReturnToLetters(t *testing.T) {
 		{
 			locale: osk.EsES, space: "Espacio", erase: "Borrar",
 			letters: "QWERTYUIOPASDFGHJKLÑZXCVBNM", punctuation: ".,-_'¿?¡!@`+´:;()/º<",
-			auxiliary: []string{"123", "ÁÉÍ"},
+			auxiliary:   []string{"123", "ÁÉÍ"},
+			accentLabel: "ÁÉÍ", accents: "ÁÉÍÓÚÜÇ",
 			positions: map[rune]ebiten.Key{
 				'Ñ': ebiten.KeySemicolon, 'Ç': ebiten.KeyBackslash, 'º': ebiten.KeyBackquote,
 				'<': ebiten.KeyIntlBackslash, '\'': ebiten.KeyMinus, '¡': ebiten.KeyEqual,
 				'`': ebiten.KeyBracketLeft, '´': ebiten.KeyQuote, '+': ebiten.KeyBracketRight, ',': ebiten.KeyComma,
 				'.': ebiten.KeyPeriod, '-': ebiten.KeySlash,
 			},
+		},
+		{
+			locale: "en-GB", space: "Space", erase: "Backspace",
+			letters: "QWERTYUIOPASDFGHJKLZXCVBNM", punctuation: ".,-_'?!@:/&£`=[]\\;()\"#",
+			auxiliary: []string{"123"}, positions: britishPositions,
+		},
+		{
+			locale: "de-DE", space: "Leerzeichen", erase: "Löschen",
+			letters: "QWERTZUIOPÜASDFGHJKLÖÄYXCVBNMß", punctuation: ".,-_'?!@:/&+#<>;()\"=",
+			auxiliary: []string{"123"}, positions: germanPositions,
+		},
+		{
+			locale: "it-IT", space: "Spazio", erase: "Cancella",
+			letters: "QWERTYUIOPASDFGHJKLZXCVBNM", punctuation: ".,-_'?!@:/&\\+<>;()\"£",
+			auxiliary: []string{"123", "ÀÈÉ"}, accentLabel: "ÀÈÉ", accents: "ÀÈÉÌÒÙ", positions: italianPositions,
 		},
 	} {
 		t.Run(string(test.locale), func(t *testing.T) {
@@ -95,8 +112,8 @@ func TestCompactLayersTypeAndReturnToLetters(t *testing.T) {
 						t.Errorf("the way back to letters is at %v, want %v", got, home)
 					}
 					characters := "1234567890" + test.punctuation
-					if entry == "ÁÉÍ" {
-						characters = "ÁÉÍÓÚÜÇ"
+					if entry == test.accentLabel {
+						characters = test.accents
 					}
 					switches := slices.Clone(test.auxiliary)
 					switches[i] = "ABC"
@@ -186,15 +203,15 @@ func expectedKey(face string, controls []string, positions map[rune]ebiten.Key) 
 		return "", []ebiten.Key{ebiten.KeyBackspace}
 	}
 	character := []rune(face)[0]
+	if position, ok := positions[character]; ok {
+		return face, []ebiten.Key{position}
+	}
 	capital := unicode.ToUpper(character)
 	switch {
 	case 'A' <= capital && capital <= 'Z':
 		return face, []ebiten.Key{ebiten.KeyA + ebiten.Key(capital-'A')}
 	case '0' <= character && character <= '9':
 		return face, []ebiten.Key{ebiten.KeyDigit0 + ebiten.Key(character-'0')}
-	}
-	if position, ok := positions[character]; ok {
-		return face, []ebiten.Key{position}
 	}
 	return face, nil
 }

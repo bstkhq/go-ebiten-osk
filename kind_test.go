@@ -9,7 +9,7 @@ import (
 )
 
 func TestStockTextKindKeepsTheExistingLayouts(t *testing.T) {
-	for _, locale := range []osk.Locale{osk.EnUS, osk.EsES} {
+	for _, locale := range []osk.Locale{osk.EnUS, osk.EsES, "en-GB", "de-DE", "it-IT"} {
 		for _, test := range []struct {
 			form osk.Form
 			face string
@@ -29,9 +29,15 @@ func TestStockTextKindKeepsTheExistingLayouts(t *testing.T) {
 
 func TestStockEmailKeys(t *testing.T) {
 	for _, test := range []struct {
-		locale osk.Locale
-		space  string
-	}{{osk.EnUS, "Space"}, {osk.EsES, "Espacio"}} {
+		locale             osk.Locale
+		space, accentLabel string
+	}{
+		{osk.EnUS, "Space", ""},
+		{osk.EsES, "Espacio", "ÁÉÍ"},
+		{"en-GB", "Space", ""},
+		{"de-DE", "Leerzeichen", ""},
+		{"it-IT", "Spazio", "ÀÈÉ"},
+	} {
 		t.Run(string(test.locale), func(t *testing.T) {
 			b := newKindBoard(t, test.locale, osk.Full, osk.KindEmail, osk.ActionNext)
 			checkKeyGeometry(t, b, b.AppendKeys(nil))
@@ -52,8 +58,8 @@ func TestStockEmailKeys(t *testing.T) {
 			home := b.key(t, "123").Rect
 			switchLayer(t, b, "123")
 			checkFullReturn(t, b, home, "@")
-			if test.locale == osk.EsES {
-				switchLayer(t, b, "ÁÉÍ")
+			if test.accentLabel != "" {
+				switchLayer(t, b, test.accentLabel)
 				checkFullReturn(t, b, home, "@")
 			}
 			compact := newKindBoard(t, test.locale, osk.Compact, osk.KindEmail, osk.ActionNext)
@@ -68,7 +74,13 @@ func TestStockNumberKeys(t *testing.T) {
 	for _, test := range []struct {
 		locale      osk.Locale
 		erase, done string
-	}{{osk.EnUS, "Delete", "Done"}, {osk.EsES, "Borrar", "Listo"}} {
+	}{
+		{osk.EnUS, "Delete", "Done"},
+		{osk.EsES, "Borrar", "Listo"},
+		{"en-GB", "Backspace", "Done"},
+		{"de-DE", "Löschen", "Fertig"},
+		{"it-IT", "Cancella", "Fine"},
+	} {
 		for _, form := range []osk.Form{osk.Compact, osk.Full} {
 			t.Run(string(test.locale)+"/"+form.String(), func(t *testing.T) {
 				b := newKindBoard(t, test.locale, form, osk.KindNumber, osk.ActionDone)
